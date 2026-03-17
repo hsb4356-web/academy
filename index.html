@@ -138,6 +138,8 @@
   .small-btn-approve:hover{background:rgba(106,247,162,0.3);}
   .small-btn-cancel{background:rgba(247,106,106,0.15);color:var(--danger);}
   .small-btn-cancel:hover{background:rgba(247,106,106,0.3);}
+  .small-btn-delete{background:rgba(247,106,106,0.08);color:var(--danger);border:1px solid rgba(247,106,106,0.3);}
+  .small-btn-delete:hover{background:rgba(247,106,106,0.25);}
   .type-badge-desk{background:rgba(106,180,247,0.15);color:var(--desk-color);padding:2px 8px;border-radius:10px;font-size:11px;}
   .type-badge-easel{background:rgba(247,162,106,0.15);color:var(--easel-color);padding:2px 8px;border-radius:10px;font-size:11px;}
   .type-badge-regular{background:rgba(167,139,250,0.15);color:var(--regular);padding:2px 8px;border-radius:10px;font-size:11px;}
@@ -239,6 +241,7 @@
         <button class="filter-btn" onclick="setFilter('desk',this)">🪑 책상</button>
         <button class="filter-btn" onclick="setFilter('easel',this)">🖼️ 이젤</button>
         <button class="filter-btn" onclick="setFilter('regular',this)">🔄 정기</button>
+        <button class="filter-btn" style="color:var(--danger);border-color:var(--danger)" onclick="deleteAllCancelled()">🗑️ 취소 전체삭제</button>
       </div>
       <div class="bookings-list" id="bookings-list"></div>
     </div>
@@ -271,9 +274,9 @@
     <div class="regular-options" id="regular-options" style="display:none">
       <label>신청 기간 선택</label>
       <div class="month-btns">
-        <button class="month-btn" onclick="selectMonths(1,this)">1개월</button>
-        <button class="month-btn" onclick="selectMonths(2,this)">2개월</button>
-        <button class="month-btn" onclick="selectMonths(3,this)">3개월</button>
+        <button class="month-btn" onclick="selectMonths(4,this)">4주 (1개월)</button>
+        <button class="month-btn" onclick="selectMonths(8,this)">8주 (2개월)</button>
+        <button class="month-btn" onclick="selectMonths(12,this)">12주 (3개월)</button>
       </div>
       <div class="regular-preview" id="regular-preview"></div>
     </div>
@@ -390,15 +393,12 @@ function countByType(key,type){
   return Object.values(list).filter(b=>b.seatType===type&&b.status!=='cancelled').length;
 }
 
-// 정기신청: 같은 요일로 N개월치 날짜 생성
-function getRegularDates(startDate, months){
+// 정기신청: 같은 요일로 N주치 날짜 생성 (4주=1개월, 8주=2개월, 12주=3개월)
+function getRegularDates(startDate, weeks){
   const dates=[];
-  const start=new Date(startDate);
-  const end=new Date(startDate);
-  end.setMonth(end.getMonth()+months);
-  const cur=new Date(start);
+  const cur=new Date(startDate);
   cur.setDate(cur.getDate()+7); // 다음주부터
-  while(cur<end){
+  for(let i=0;i<weeks-1;i++){
     dates.push(new Date(cur));
     cur.setDate(cur.getDate()+7);
   }
@@ -417,7 +417,7 @@ function changeWeek(dir){currentWeekOffset+=dir;renderSchedule();if(adminLoggedI
 // ── 스케줄 렌더 ──
 function renderSchedule(){
   const dates=getWeekDates(currentWeekOffset);
-  document.getElementById('week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}주`;
+  document.getElementById('week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
   const grid=document.getElementById('schedule-grid');
   grid.innerHTML='';
   grid.appendChild(el('div','grid-header',''));
@@ -511,7 +511,8 @@ function selectMonths(n,btn){
   const dates=getRegularDates(selectedCell.date,n);
   const preview=document.getElementById('regular-preview');
   if(dates.length===0){preview.innerHTML='<span style="color:var(--danger)">신청 가능한 날짜가 없습니다</span>';return;}
-  preview.innerHTML=`매주 <span>${DAYS[dayIdx(selectedCell.date)]}요일 ${PERIODS[selectedCell.pi].label}</span> · 총 <span>${dates.length+1}회</span> (이번 수업 포함)`;
+  const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[n]||`${n}주`;
+  preview.innerHTML=`매주 <span>${DAYS[dayIdx(selectedCell.date)]}요일 ${PERIODS[selectedCell.pi].label}</span> · <span>${n}주(${weekLabel})</span> · 총 <span>${dates.length+1}회</span> (이번 수업 포함)`;
 }
 
 function selectSeatType(type){
@@ -580,15 +581,17 @@ async function submitBooking(){
     // 이메일 알림
     const p=PERIODS[selectedCell.pi],d=selectedCell.date;
     const typeLabel=selectedSeatType==='desk'?'🪑 책상':'🖼️ 이젤';
-    const regularInfo=bookingType==='regular'?`\n🔄 정기신청: ${selectedMonths}개월 (총 ${regularCount+1}회)`:'';
+    const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
+    const regularInfo=bookingType==='regular'?`\n🔄 정기신청: ${selectedMonths}주(${weekLabel}) · 총 ${regularCount+1}회`:'';
     await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
       subject:`${bookingType==='regular'?'[정기] ':''}새 수업 신청 - ${name}님`,
       message:`새로운 수업 신청이 들어왔습니다!\n\n👤 이름: ${name}\n📱 전화번호: ${phone}\n📅 날짜: ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[dayIdx(d)]})\n⏰ 수업: ${p.label} (${p.time})\n🪑 자리: ${typeLabel}${regularInfo}\n\n관리자 페이지에서 승인해주세요.`
     });
 
     closeModal('booking-modal');
+    const wLabel={4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
     const msg=bookingType==='regular'
-      ?`${name}님 정기 신청 완료! (총 ${regularCount+1}회) ✅`
+      ?`${name}님 정기 신청 완료! ${selectedMonths}주(${wLabel}) 총 ${regularCount+1}회 ✅`
       :`${name}님 ${typeLabel} 자리 신청 완료! ✅`;
     showToast(msg,'success');
   } catch(e){showToast('신청 중 오류가 발생했습니다','error');console.error(e);}
@@ -682,7 +685,7 @@ function adminLogin(){
 function renderAdmin(){
   if(!adminLoggedIn)return;
   const dates=getWeekDates(currentWeekOffset);
-  document.getElementById('admin-week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}주`;
+  document.getElementById('admin-week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
   renderToggleGrid(dates);renderBookingsList();
 }
 function renderToggleGrid(dates){
@@ -734,6 +737,7 @@ function renderBookingsList(){
       <div class="booking-actions">
         ${b.status==='pending'?`<button class="small-btn small-btn-approve" onclick="updateStatus('${b.key}','${b.id}','approved','${b.name}')">승인</button>`:''}
         ${b.status!=='cancelled'?`<button class="small-btn small-btn-cancel" onclick="updateStatus('${b.key}','${b.id}','cancelled','${b.name}')">취소</button>`:''}
+        ${b.status==='cancelled'?`<button class="small-btn small-btn-delete" onclick="deleteBooking('${b.key}','${b.id}','${b.name}')">🗑️ 삭제</button>`:''}
       </div>`;
     list.appendChild(card);
   });
@@ -742,6 +746,32 @@ async function updateStatus(key,id,status,name){
   showLoading(true);
   try{await db.ref(`bookings/${key}/${id}`).update({status});showToast(status==='approved'?`${name}님 승인 ✅`:`${name}님 취소`,status==='approved'?'success':'error');}
   catch(e){showToast('오류가 발생했습니다','error');}
+  showLoading(false);
+}
+
+async function deleteBooking(key,id,name){
+  if(!confirm(`${name}님 신청 내역을 완전히 삭제할까요?`))return;
+  showLoading(true);
+  try{
+    await db.ref(`bookings/${key}/${id}`).remove();
+    showToast(`${name}님 내역이 삭제됐습니다`,'success');
+  } catch(e){showToast('삭제 중 오류가 발생했습니다','error');}
+  showLoading(false);
+}
+
+async function deleteAllCancelled(){
+  if(!confirm('취소된 신청 내역을 모두 삭제할까요?\n이 작업은 되돌릴 수 없습니다.'))return;
+  showLoading(true);
+  try{
+    const updates={};
+    Object.entries(allBookings).forEach(([key,bMap])=>{
+      Object.entries(bMap).forEach(([id,b])=>{
+        if(b.status==='cancelled') updates[`bookings/${key}/${id}`]=null;
+      });
+    });
+    await db.ref().update(updates);
+    showToast('취소 내역이 모두 삭제됐습니다 🗑️','success');
+  } catch(e){showToast('삭제 중 오류가 발생했습니다','error');}
   showLoading(false);
 }
 
