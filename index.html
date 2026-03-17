@@ -207,6 +207,7 @@
     <div class="legend-item"><div class="legend-dot" style="background:var(--regular)"></div> 정기 수강</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--border)"></div> 휴강</div>
     <div class="legend-item" style="font-size:11px;color:var(--text2)">※ 당일 신청/취소 불가</div>
+    <button onclick="document.getElementById('change-modal').classList.add('show')" style="margin-left:auto;padding:6px 16px;border-radius:20px;border:1px solid var(--accent2);background:transparent;color:var(--accent2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:12px;">✏️ 수업 변경</button>
   </div>
   <div class="schedule-grid" id="schedule-grid"></div>
 </main>
@@ -329,6 +330,70 @@
   </div>
 </div>
 
+<!-- 수업 변경 모달 -->
+<div class="modal-overlay" id="change-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('change-modal')">✕</button>
+    <h3>✏️ 수업 변경</h3>
+    <div class="modal-subtitle">전화번호로 신청 내역을 확인하세요</div>
+    <div class="deadline-notice">⚠️ 변경은 수업 하루 전까지만 가능합니다</div>
+    <div class="form-group">
+      <label>전화번호</label>
+      <input type="tel" id="change-phone" placeholder="010-0000-0000" oninput="formatPhone(this)">
+    </div>
+    <div id="change-results"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('change-modal')">닫기</button>
+      <button class="btn btn-primary" onclick="searchForChange()">조회하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 변경할 새 수업 선택 모달 -->
+<div class="modal-overlay" id="change-new-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('change-new-modal')">✕</button>
+    <h3>✏️ 변경할 수업 선택</h3>
+    <div class="modal-subtitle" id="change-new-subtitle"></div>
+    <div class="deadline-notice" id="change-from-info"></div>
+
+    <!-- 날짜 선택 -->
+    <div class="form-group">
+      <label>변경할 날짜</label>
+      <input type="date" id="change-new-date" onchange="updateChangeNewSlots()">
+    </div>
+
+    <!-- 교시 선택 -->
+    <div class="form-group">
+      <label>변경할 교시</label>
+      <div class="month-btns" id="change-period-btns">
+        <button class="month-btn" onclick="selectChangePeriod(0,this)">1교시 10:00~13:00</button>
+        <button class="month-btn" onclick="selectChangePeriod(1,this)">2교시 14:00~17:00</button>
+        <button class="month-btn" onclick="selectChangePeriod(2,this)">3교시 18:00~22:00</button>
+      </div>
+    </div>
+
+    <!-- 자리 선택 -->
+    <div class="seat-select">
+      <div class="seat-select-card" id="change-card-desk" onclick="selectChangeSeat('desk')">
+        <div class="seat-icon">🪑</div>
+        <div class="seat-name">책상 자리</div>
+        <div class="seat-remain" id="change-desk-remain">-</div>
+      </div>
+      <div class="seat-select-card" id="change-card-easel" onclick="selectChangeSeat('easel')">
+        <div class="seat-icon">🖼️</div>
+        <div class="seat-name">이젤 자리</div>
+        <div class="seat-remain" id="change-easel-remain">-</div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('change-new-modal')">취소</button>
+      <button class="btn" style="background:var(--accent2);color:#fff;flex:1" onclick="submitChange()">변경하기</button>
+    </div>
+  </div>
+</div>
+
 <div class="loading-overlay" id="loading"><div class="spinner"></div><div style="color:var(--text2);font-size:14px">처리 중...</div></div>
 <div class="toast" id="toast"></div>
 
@@ -349,11 +414,11 @@ const db = firebase.database();
 // ── EmailJS ──
 emailjs.init("EAMnebZf2zSSMZ1R6");
 const EMAILJS_SERVICE_ID = "service_5w7zhom";
-const EMAILJS_TEMPLATE_ID = "emj95ds";
+const EMAILJS_TEMPLATE_ID = "template_emj95ds";
 
 // ── 상수 ──
 const MAX_DESK = 4, MAX_EASEL = 5;
-const ADMIN_PASSWORD = '3750';
+const ADMIN_PASSWORD = '1234';
 const DAYS = ['월','화','수','목','금','토','일'];
 const PERIODS = [
   {label:'1교시',time:'10:00~13:00'},
@@ -775,16 +840,160 @@ async function deleteAllCancelled(){
   showLoading(false);
 }
 
-function showLoading(show){document.getElementById('loading').classList.toggle('show',show);}
+// ── 수업 변경 ──
+let changeTarget = null; // 변경할 기존 신청 정보
+let changeNewPeriod = null;
+let changeNewSeat = null;
+
+function searchForChange() {
+  const phone = document.getElementById('change-phone').value.trim();
+  if (!phone||phone.length<9){showToast('전화번호를 입력해주세요','error');return;}
+  const resultsDiv = document.getElementById('change-results');
+  const found = [];
+  Object.entries(allBookings).forEach(([key,bMap])=>{
+    Object.entries(bMap).forEach(([id,b])=>{
+      if(b.phone===phone&&b.status!=='cancelled'){
+        const [dateStr,pi]=key.split('_');
+        const d=new Date(dateStr);
+        if(!isDeadlinePassed(d)) found.push({key,id,dateStr,pi:parseInt(pi),...b});
+      }
+    });
+  });
+  found.sort((a,b)=>new Date(a.dateStr)-new Date(b.dateStr));
+  if(found.length===0){resultsDiv.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0">변경 가능한 신청 내역이 없습니다</div>';return;}
+  resultsDiv.innerHTML = found.map(b=>{
+    const p=PERIODS[b.pi];const d=new Date(b.dateStr);
+    const typeLabel=b.seatType==='desk'?'🪑 책상':'🖼️ 이젤';
+    return `
+      <div class="cancel-booking-item">
+        <p>📅 <strong>${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}</strong></p>
+        <p>자리: <strong>${typeLabel}</strong></p>
+        <button class="btn btn-secondary" style="margin-top:8px;width:100%;background:rgba(247,162,106,0.12);color:var(--accent2);border-color:var(--accent2);font-size:13px"
+          onclick="openChangeNewModal('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi})">
+          ✏️ 이 수업 변경하기
+        </button>
+      </div>`;
+  }).join('');
+}
+
+function openChangeNewModal(key, id, name, seatType, dateStr, pi) {
+  changeTarget = {key, id, name, seatType, dateStr, pi:parseInt(pi)};
+  changeNewPeriod = null;
+  changeNewSeat = null;
+  const d = new Date(dateStr);
+  const p = PERIODS[parseInt(pi)];
+  document.getElementById('change-new-subtitle').textContent = `${name}님의 수업을 변경합니다`;
+  document.getElementById('change-from-info').textContent =
+    `현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'🪑 책상':'🖼️ 이젤'}`;
+
+  // 날짜 최솟값 설정 (내일부터)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate()+1);
+  const minDate = tomorrow.toISOString().slice(0,10);
+  document.getElementById('change-new-date').min = minDate;
+  document.getElementById('change-new-date').value = '';
+
+  // 교시 버튼 초기화
+  document.querySelectorAll('#change-period-btns .month-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('change-card-desk').className = 'seat-select-card disabled';
+  document.getElementById('change-card-easel').className = 'seat-select-card disabled';
+  document.getElementById('change-desk-remain').textContent = '-';
+  document.getElementById('change-easel-remain').textContent = '-';
+
+  closeModal('change-modal');
+  document.getElementById('change-new-modal').classList.add('show');
+}
+
+function updateChangeNewSlots() {
+  if(changeNewPeriod===null) return;
+  const dateVal = document.getElementById('change-new-date').value;
+  if(!dateVal) return;
+  const key = `${dateVal}_${changeNewPeriod}`;
+  const deskLeft = MAX_DESK - countByType(key,'desk');
+  const easelLeft = MAX_EASEL - countByType(key,'easel');
+  const closed = allClosed[key];
+
+  document.getElementById('change-card-desk').className = 'seat-select-card'+(closed||deskLeft<=0?' disabled':'')+(changeNewSeat==='desk'?' selected-desk':'');
+  document.getElementById('change-card-easel').className = 'seat-select-card'+(closed||easelLeft<=0?' disabled':'')+(changeNewSeat==='easel'?' selected-easel':'');
+  document.getElementById('change-desk-remain').textContent = closed?'휴강':deskLeft<=0?'마감':`${deskLeft}자리 남음`;
+  document.getElementById('change-easel-remain').textContent = closed?'휴강':easelLeft<=0?'마감':`${easelLeft}자리 남음`;
+  changeNewSeat = null;
+}
+
+function selectChangePeriod(pi, btn) {
+  changeNewPeriod = pi;
+  document.querySelectorAll('#change-period-btns .month-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  updateChangeNewSlots();
+}
+
+function selectChangeSeat(type) {
+  const dateVal = document.getElementById('change-new-date').value;
+  if(!dateVal||changeNewPeriod===null) return;
+  const key = `${dateVal}_${changeNewPeriod}`;
+  const left = type==='desk'? MAX_DESK-countByType(key,'desk') : MAX_EASEL-countByType(key,'easel');
+  if(left<=0||allClosed[key]) return;
+  changeNewSeat = type;
+  document.getElementById('change-card-desk').className = 'seat-select-card'+(MAX_DESK-countByType(key,'desk')<=0?' disabled':'')+(type==='desk'?' selected-desk':'');
+  document.getElementById('change-card-easel').className = 'seat-select-card'+(MAX_EASEL-countByType(key,'easel')<=0?' disabled':'')+(type==='easel'?' selected-easel':'');
+}
+
+async function submitChange() {
+  const dateVal = document.getElementById('change-new-date').value;
+  if(!dateVal){showToast('날짜를 선택해주세요','error');return;}
+  if(changeNewPeriod===null){showToast('교시를 선택해주세요','error');return;}
+  if(!changeNewSeat){showToast('자리를 선택해주세요','error');return;}
+
+  const newKey = `${dateVal}_${changeNewPeriod}`;
+  if(newKey===changeTarget.key&&changeNewSeat===changeTarget.seatType){
+    showToast('현재와 동일한 수업입니다','error');return;
+  }
+
+  showLoading(true);
+  try {
+    // 기존 신청 취소
+    await db.ref(`bookings/${changeTarget.key}/${changeTarget.id}`).update({status:'cancelled'});
+
+    // 새 수업 신청
+    const oldBooking = allBookings[changeTarget.key]?.[changeTarget.id] || {};
+    await db.ref(`bookings/${newKey}`).push({
+      name: changeTarget.name,
+      phone: oldBooking.phone || '',
+      seatType: changeNewSeat,
+      status: 'pending',
+      time: new Date().toISOString(),
+      isRegular: false,
+      regularId: null,
+    });
+
+    // 이메일 알림
+    const newDate = new Date(dateVal);
+    const p = PERIODS[changeNewPeriod];
+    const oldP = PERIODS[changeTarget.pi];
+    const oldDate = new Date(changeTarget.dateStr);
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      subject: `수업 변경 - ${changeTarget.name}님`,
+      message: `수업이 변경되었습니다.\n\n👤 이름: ${changeTarget.name}\n\n` +
+        `[변경 전]\n📅 ${oldDate.getMonth()+1}/${oldDate.getDate()} (${DAYS[dayIdx(oldDate)]}) ${oldP.label}\n🪑 ${changeTarget.seatType==='desk'?'책상':'이젤'}\n\n` +
+        `[변경 후]\n📅 ${newDate.getMonth()+1}/${newDate.getDate()} (${DAYS[dayIdx(newDate)]}) ${p.label}\n🪑 ${changeNewSeat==='desk'?'책상':'이젤'}`
+    });
+
+    closeModal('change-new-modal');
+    showToast(`${changeTarget.name}님 수업이 변경됐습니다 ✅`, 'success');
+  } catch(e){showToast('변경 중 오류가 발생했습니다','error');console.error(e);}
+  showLoading(false);
+}
 function showToast(msg,type='success'){
   const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;
   setTimeout(()=>t.classList.remove('show'),3500);
 }
 
 renderSchedule();
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('booking-modal');closeModal('cancel-modal');}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('booking-modal');closeModal('cancel-modal');closeModal('change-modal');closeModal('change-new-modal');}});
 document.getElementById('booking-modal').addEventListener('click',e=>{if(e.target.id==='booking-modal')closeModal('booking-modal');});
 document.getElementById('cancel-modal').addEventListener('click',e=>{if(e.target.id==='cancel-modal')closeModal('cancel-modal');});
+document.getElementById('change-modal').addEventListener('click',e=>{if(e.target.id==='change-modal')closeModal('change-modal');});
+document.getElementById('change-new-modal').addEventListener('click',e=>{if(e.target.id==='change-new-modal')closeModal('change-new-modal');});
 </script>
 </body>
 </html>
