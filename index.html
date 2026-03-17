@@ -442,7 +442,10 @@ function getWeekDates(offset){
   monday.setDate(now.getDate()-(day===0?6:day-1)+offset*7);
   return Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(monday.getDate()+i);return d;});
 }
-function dateKey(d){return d.toISOString().slice(0,10);}
+function dateKey(d){
+  if(typeof d === 'string') return d.slice(0,10);
+  return d.toISOString().slice(0,10);
+}
 function cellKey(d,pi){return `${dateKey(d)}_${pi}`;}
 function formatDate(d){return `${d.getMonth()+1}/${d.getDate()}`;}
 function isToday(d){return d.toDateString()===new Date().toDateString();}
@@ -615,7 +618,6 @@ async function submitBooking(){
 
     // 이번 수업 신청
     const key=selectedCell.key;
-    if(!allBookings[key])allBookings[key]={};
     const existing=Object.values(allBookings[key]||{});
     if(existing.find(b=>b.phone===phone&&b.status!=='cancelled')){
       showLoading(false);showToast('이미 신청된 전화번호입니다','error');return;
@@ -630,21 +632,24 @@ async function submitBooking(){
     // 정기신청: 이후 날짜들도 신청
     let regularCount=0;
     if(bookingType==='regular'&&selectedMonths>0){
-      const futureDates=getRegularDates(selectedCell.date,selectedMonths);
+      // selectedCell.date를 새 Date 객체로 확실히 변환
+      const startDate = new Date(selectedCell.date);
+      const futureDates=getRegularDates(startDate, selectedMonths);
       for(const futureDate of futureDates){
         const fKey=cellKey(futureDate,selectedCell.pi);
-        if(allClosed[fKey])continue; // 휴강 제외
+        if(allClosed[fKey])continue;
         const fExisting=Object.values(allBookings[fKey]||{});
-        if(fExisting.find(b=>b.phone===phone&&b.status!=='cancelled'))continue; // 중복 제외
+        if(fExisting.find(b=>b.phone===phone&&b.status!=='cancelled'))continue;
         const fUsed=countByType(fKey,selectedSeatType);
-        if(fUsed>=max)continue; // 마감 제외
+        if(fUsed>=max)continue;
         await db.ref(`bookings/${fKey}`).push({...bookingData,time:new Date().toISOString()});
         regularCount++;
       }
     }
 
     // 이메일 알림
-    const p=PERIODS[selectedCell.pi],d=selectedCell.date;
+    const p=PERIODS[selectedCell.pi];
+    const d=new Date(selectedCell.date);
     const typeLabel=selectedSeatType==='desk'?'🪑 책상':'🖼️ 이젤';
     const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
     const regularInfo=bookingType==='regular'?`\n🔄 정기신청: ${selectedMonths}주(${weekLabel}) · 총 ${regularCount+1}회`:'';
