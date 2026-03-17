@@ -988,6 +988,7 @@ async function submitChange() {
   } catch(e){showToast('변경 중 오류가 발생했습니다','error');console.error(e);}
   showLoading(false);
 }
+function showLoading(show){document.getElementById('loading').classList.toggle('show',show);}
 function showToast(msg,type='success'){
   const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;
   setTimeout(()=>t.classList.remove('show'),3500);
