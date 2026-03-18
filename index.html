@@ -222,8 +222,8 @@
     <button class="nav-btn" onclick="changeWeek(1)">&#8594;</button>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:var(--desk-color)"></div> 🪑 책상 (최대 4명)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:var(--easel-color)"></div> 🖼️ 이젤 (최대 5명)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--desk-color)"></div> 책상 (최대 4명)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--easel-color)"></div> 이젤 (최대 5명)</div>
     <div class="legend-item"><div class="legend-dot" style="background:#D1D5DB"></div> 휴강</div>
     <div class="legend-item" style="font-size:11px;color:var(--text2)">숫자 = 남은 자리</div>
     <button onclick="document.getElementById('change-modal').classList.add('show')" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent2);background:#fff;color:var(--accent2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 수업 변경</button>
@@ -251,6 +251,14 @@
       </div>
       <div class="toggle-closed-grid" id="toggle-grid"></div>
     </div>
+
+    <div class="admin-section">
+      <h3>👥 주간 수강 현황표</h3>
+      <div style="overflow-x:auto;">
+        <table id="overview-table" style="width:100%;border-collapse:collapse;font-size:12px;"></table>
+      </div>
+    </div>
+
     <div class="admin-section">
       <h3>📋 신청자 명단</h3>
       <div class="filter-bar">
@@ -258,8 +266,8 @@
         <button class="filter-btn" onclick="setFilter('pending',this)">대기중</button>
         <button class="filter-btn" onclick="setFilter('approved',this)">승인됨</button>
         <button class="filter-btn" onclick="setFilter('cancelled',this)">취소됨</button>
-        <button class="filter-btn" onclick="setFilter('desk',this)">🪑 책상</button>
-        <button class="filter-btn" onclick="setFilter('easel',this)">🖼️ 이젤</button>
+        <button class="filter-btn" onclick="setFilter('desk',this)">책상</button>
+        <button class="filter-btn" onclick="setFilter('easel',this)">이젤</button>
         <button class="filter-btn" onclick="setFilter('regular',this)">🔄 정기</button>
         <button class="filter-btn" style="color:var(--danger);border-color:var(--danger)" onclick="deleteAllCancelled()">🗑️ 취소 전체삭제</button>
       </div>
@@ -276,6 +284,7 @@
     <h3 id="modal-title">수업 신청</h3>
     <div class="modal-subtitle" id="modal-subtitle"></div>
     <div class="deadline-notice">⚠️ 신청은 수업 하루 전까지만 가능합니다</div>
+    <div style="background:#FEF2F2;border:1.5px solid #FECACA;border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#991B1B;font-weight:600;">🚫 수강 신청 후 결석 시 보충수업은 제공되지 않습니다</div>
 
     <!-- 신청 타입 선택 -->
     <div class="booking-type-select">
@@ -305,12 +314,10 @@
     <!-- 자리 선택 -->
     <div class="seat-select">
       <div class="seat-select-card" id="card-desk" onclick="selectSeatType('desk')">
-        <div class="seat-icon">🪑</div>
         <div class="seat-name">책상 자리</div>
         <div class="seat-remain" id="desk-remain"></div>
       </div>
       <div class="seat-select-card" id="card-easel" onclick="selectSeatType('easel')">
-        <div class="seat-icon">🖼️</div>
         <div class="seat-name">이젤 자리</div>
         <div class="seat-remain" id="easel-remain"></div>
       </div>
@@ -399,12 +406,10 @@
     <!-- 자리 선택 -->
     <div class="seat-select">
       <div class="seat-select-card" id="change-card-desk" onclick="selectChangeSeat('desk')">
-        <div class="seat-icon">🪑</div>
         <div class="seat-name">책상 자리</div>
         <div class="seat-remain" id="change-desk-remain">-</div>
       </div>
       <div class="seat-select-card" id="change-card-easel" onclick="selectChangeSeat('easel')">
-        <div class="seat-icon">🖼️</div>
         <div class="seat-name">이젤 자리</div>
         <div class="seat-remain" id="change-easel-remain">-</div>
       </div>
@@ -456,7 +461,7 @@ let adminLoggedIn=false, currentFilter='all';
 let allBookings={}, allClosed={};
 
 // ── Firebase 실시간 연동 ──
-db.ref('bookings').on('value', snap=>{allBookings=snap.val()||{};renderSchedule();if(adminLoggedIn)renderBookingsList();});
+db.ref('bookings').on('value', snap=>{allBookings=snap.val()||{};renderSchedule();if(adminLoggedIn){renderOverviewTable(getWeekDates(currentWeekOffset));renderBookingsList();}});
 db.ref('closed').on('value', snap=>{allClosed=snap.val()||{};renderSchedule();if(adminLoggedIn)renderToggleGrid(getWeekDates(currentWeekOffset));});
 
 // ── 유틸 ──
@@ -675,12 +680,12 @@ async function submitBooking(){
     // 이메일 알림
     const p=PERIODS[selectedCell.pi];
     const d=new Date(selectedCell.date);
-    const typeLabel=selectedSeatType==='desk'?'🪑 책상':'🖼️ 이젤';
+    const typeLabel=selectedSeatType==='desk'?'책상':'이젤';
     const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
     const regularInfo=bookingType==='regular'?`\n🔄 정기신청: ${selectedMonths}주(${weekLabel}) · 총 ${regularCount+1}회`:'';
     await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
       subject:`${bookingType==='regular'?'[정기] ':''}새 수업 신청 - ${name}님`,
-      message:`새로운 수업 신청이 들어왔습니다!\n\n👤 이름: ${name}\n📱 전화번호: ${phone}\n📅 날짜: ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[dayIdx(d)]})\n⏰ 수업: ${p.label} (${p.time})\n🪑 자리: ${typeLabel}${regularInfo}\n\n관리자 페이지에서 승인해주세요.`
+      message:`새로운 수업 신청이 들어왔습니다!\n\n👤 이름: ${name}\n📱 전화번호: ${phone}\n📅 날짜: ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[dayIdx(d)]})\n⏰ 수업: ${p.label} (${p.time})\n자리: ${typeLabel}${regularInfo}\n\n관리자 페이지에서 승인해주세요.`
     });
 
     closeModal('booking-modal');
@@ -713,7 +718,7 @@ function searchBooking(){
 
   resultsDiv.innerHTML=found.map(b=>{
     const p=PERIODS[b.pi];const d=new Date(b.dateStr);
-    const typeLabel=b.seatType==='desk'?'🪑 책상':'🖼️ 이젤';
+    const typeLabel=b.seatType==='desk'?'책상':'이젤';
     const regularBadge=b.isRegular?`<span style="color:var(--regular);font-size:11px"> 🔄 정기</span>`:'';
     return `
       <div class="cancel-booking-item${b.isRegular?' is-regular':''}">
@@ -757,7 +762,7 @@ async function confirmCancel(key,id,name,seatType,isRegular,regularId,phone){
     const p=PERIODS[parseInt(pi)],d=new Date(dateStr);
     await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
       subject:`수업 취소 - ${name}님`,
-      message:`수업 신청이 취소되었습니다.\n\n👤 이름: ${name}\n📅 날짜: ${d.getMonth()+1}/${d.getDate()}\n⏰ 수업: ${p.label}\n🪑 자리: ${seatType==='desk'?'책상':'이젤'}`
+      message:`수업 신청이 취소되었습니다.\n\n👤 이름: ${name}\n📅 날짜: ${d.getMonth()+1}/${d.getDate()}\n⏰ 수업: ${p.label}\n자리: ${seatType==='desk'?'책상':'이젤'}`
     });
 
     document.getElementById('cancel-results').innerHTML='';
@@ -777,12 +782,66 @@ function adminLogin(){
     renderAdmin();
   } else showToast('비밀번호가 틀렸습니다','error');
 }
-function renderAdmin(){
-  if(!adminLoggedIn)return;
-  const dates=getWeekDates(currentWeekOffset);
-  document.getElementById('admin-week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
-  renderToggleGrid(dates);renderBookingsList();
+function renderAdmin() {
+  if (!adminLoggedIn) return;
+  const dates = getWeekDates(currentWeekOffset);
+  document.getElementById('admin-week-title').textContent = `${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
+  renderToggleGrid(dates);
+  renderOverviewTable(dates);
+  renderBookingsList();
 }
+function renderOverviewTable(dates) {
+  const table = document.getElementById('overview-table');
+  if (!table) return;
+
+  const thStyle = `padding:8px 6px;text-align:center;font-weight:700;font-size:11px;background:#F0F2F8;border:1px solid #E2E5EF;white-space:nowrap;`;
+  const tdStyle = `padding:6px 4px;text-align:center;border:1px solid #E2E5EF;vertical-align:top;font-size:11px;`;
+
+  // 헤더행: 교시 + 요일별 날짜
+  let html = `<thead><tr>
+    <th style="${thStyle}">교시</th>
+    ${dates.map(d=>`<th style="${thStyle}${isToday(d)?'color:#4F46E5;':''}">${DAYS[dayIdx(d)]}<br>${formatDate(d)}</th>`).join('')}
+  </tr></thead><tbody>`;
+
+  PERIODS.forEach((p, pi) => {
+    html += `<tr><td style="${thStyle}">${p.label}<br><span style="font-weight:400;color:#6B7280">${p.time}</span></td>`;
+    dates.forEach(d => {
+      const key = cellKey(d, pi);
+      const closed = allClosed[key];
+      const list = allBookings[key] ? Object.values(allBookings[key]).filter(b => b.status !== 'cancelled') : [];
+      const deskList = list.filter(b => b.seatType === 'desk');
+      const easelList = list.filter(b => b.seatType === 'easel');
+
+      if (closed) {
+        html += `<td style="${tdStyle}background:#F9FAFB;"><span style="color:#9CA3AF;font-weight:600;">휴강</span></td>`;
+      } else if (list.length === 0) {
+        html += `<td style="${tdStyle}color:#D1D5DB;">-</td>`;
+      } else {
+        let content = '';
+        if (deskList.length > 0) {
+          content += `<div style="margin-bottom:3px;"><span style="background:#DBEAFE;color:#1D4ED8;padding:1px 4px;border-radius:4px;font-weight:700;font-size:10px;">책상 ${deskList.length}</span></div>`;
+          content += deskList.map(b =>
+            `<div style="color:#1E1E2E;font-weight:500;padding:1px 0;border-bottom:1px dashed #F0F2F8">${b.name}</div>`
+          ).join('');
+        }
+        if (easelList.length > 0) {
+          content += `<div style="margin-top:3px;margin-bottom:3px;"><span style="background:#FFEDD5;color:#C2410C;padding:1px 4px;border-radius:4px;font-weight:700;font-size:10px;">이젤 ${easelList.length}</span></div>`;
+          content += easelList.map(b =>
+            `<div style="color:#1E1E2E;font-weight:500;padding:1px 0;border-bottom:1px dashed #F0F2F8">${b.name}</div>`
+          ).join('');
+        }
+        const totalLeft = (MAX_DESK - deskList.length) + (MAX_EASEL - easelList.length);
+        const bgColor = totalLeft === 0 ? '#FEF2F2' : totalLeft <= 2 ? '#FFFBEB' : '#fff';
+        html += `<td style="${tdStyle}background:${bgColor};">${content}<div style="margin-top:4px;font-size:10px;color:#9CA3AF;">잔여${totalLeft}</div></td>`;
+      }
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
 function renderToggleGrid(dates){
   const grid=document.getElementById('toggle-grid');grid.innerHTML='';
   grid.appendChild(el('div','toggle-cell header-cell',''));
@@ -819,7 +878,7 @@ function renderBookingsList(){
     const p=PERIODS[b.pi];const d=new Date(b.dateStr);
     const statusLabel={pending:'대기중',approved:'승인됨',cancelled:'취소됨'}[b.status];
     const statusCls={pending:'status-pending',approved:'status-approved',cancelled:'status-cancelled'}[b.status];
-    const typeBadge=b.seatType==='desk'?'<span class="type-badge-desk">🪑 책상</span>':'<span class="type-badge-easel">🖼️ 이젤</span>';
+    const typeBadge=b.seatType==='desk'?'<span class="type-badge-desk">책상</span>':'<span class="type-badge-easel">이젤</span>';
     const regularBadge=b.isRegular?'<span class="type-badge-regular">🔄 정기</span>':'';
     const card=document.createElement('div');
     card.className='booking-card'+(b.isRegular?' is-regular':'');
@@ -893,7 +952,7 @@ function searchForChange() {
   if(found.length===0){resultsDiv.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0">변경 가능한 신청 내역이 없습니다</div>';return;}
   resultsDiv.innerHTML = found.map(b=>{
     const p=PERIODS[b.pi];const d=new Date(b.dateStr);
-    const typeLabel=b.seatType==='desk'?'🪑 책상':'🖼️ 이젤';
+    const typeLabel=b.seatType==='desk'?'책상':'이젤';
     return `
       <div class="cancel-booking-item">
         <p>📅 <strong>${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}</strong></p>
@@ -914,7 +973,7 @@ function openChangeNewModal(key, id, name, seatType, dateStr, pi) {
   const p = PERIODS[parseInt(pi)];
   document.getElementById('change-new-subtitle').textContent = `${name}님의 수업을 변경합니다`;
   document.getElementById('change-from-info').textContent =
-    `현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'🪑 책상':'🖼️ 이젤'}`;
+    `현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'책상':'이젤'}`;
 
   // 날짜 최솟값 설정 (내일부터)
   const tomorrow = new Date();
