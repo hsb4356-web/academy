@@ -226,7 +226,7 @@
     <div class="legend-item"><div class="legend-dot" style="background:var(--easel-color)"></div> 이젤 (최대 5명)</div>
     <div class="legend-item"><div class="legend-dot" style="background:#D1D5DB"></div> 휴강</div>
     <div class="legend-item" style="font-size:11px;color:var(--text2)">숫자 = 남은 자리</div>
-    <button onclick="document.getElementById('change-modal').classList.add('show')" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent2);background:#fff;color:var(--accent2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 수업 변경</button>
+    <button onclick="openMyBookings()" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📋 내 수업</button>
   </div>
   <div class="schedule-grid" id="schedule-grid"></div>
 </main>
@@ -338,42 +338,21 @@
   </div>
 </div>
 
-<!-- 취소 모달 -->
-<div class="modal-overlay" id="cancel-modal">
+<!-- 내 수업 관리 모달 (취소 + 변경 통합) -->
+<div class="modal-overlay" id="my-modal">
   <div class="modal">
     <span class="modal-handle"></span>
-    <button class="modal-close" onclick="closeModal('cancel-modal')">✕</button>
-    <h3>신청 취소</h3>
+    <button class="modal-close" onclick="closeModal('my-modal')">✕</button>
+    <h3>📋 내 수업 관리</h3>
     <div class="modal-subtitle">전화번호로 신청 내역을 확인하세요</div>
-    <div class="deadline-notice">⚠️ 취소는 수업 하루 전까지만 가능합니다</div>
-    <div class="form-group">
+    <div class="form-group" id="my-phone-form">
       <label>전화번호</label>
-      <input type="tel" id="cancel-phone" placeholder="010-0000-0000" oninput="formatPhone(this)">
+      <input type="tel" id="my-phone" placeholder="010-0000-0000" oninput="formatPhone(this)" onkeydown="if(event.key==='Enter')searchMyBookings()">
     </div>
-    <div id="cancel-results"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('cancel-modal')">닫기</button>
-      <button class="btn btn-primary" onclick="searchBooking()">조회하기</button>
-    </div>
-  </div>
-</div>
-
-<!-- 수업 변경 모달 -->
-<div class="modal-overlay" id="change-modal">
-  <div class="modal">
-    <span class="modal-handle"></span>
-    <button class="modal-close" onclick="closeModal('change-modal')">✕</button>
-    <h3>✏️ 수업 변경</h3>
-    <div class="modal-subtitle">전화번호로 신청 내역을 확인하세요</div>
-    <div class="deadline-notice">⚠️ 변경은 수업 하루 전까지만 가능합니다</div>
-    <div class="form-group">
-      <label>전화번호</label>
-      <input type="tel" id="change-phone" placeholder="010-0000-0000" oninput="formatPhone(this)">
-    </div>
-    <div id="change-results"></div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('change-modal')">닫기</button>
-      <button class="btn btn-primary" onclick="searchForChange()">조회하기</button>
+    <div id="my-results"></div>
+    <div class="modal-actions" id="my-actions">
+      <button class="btn btn-secondary" onclick="closeModal('my-modal')">닫기</button>
+      <button class="btn btn-primary" onclick="searchMyBookings()">조회하기</button>
     </div>
   </div>
 </div>
@@ -387,13 +366,11 @@
     <div class="modal-subtitle" id="change-new-subtitle"></div>
     <div class="deadline-notice" id="change-from-info"></div>
 
-    <!-- 날짜 선택 -->
     <div class="form-group">
       <label>변경할 날짜</label>
       <input type="date" id="change-new-date" onchange="updateChangeNewSlots()">
     </div>
 
-    <!-- 교시 선택 -->
     <div class="form-group">
       <label>변경할 교시</label>
       <div class="month-btns" id="change-period-btns">
@@ -403,7 +380,6 @@
       </div>
     </div>
 
-    <!-- 자리 선택 -->
     <div class="seat-select">
       <div class="seat-select-card" id="change-card-desk" onclick="selectChangeSeat('desk')">
         <div class="seat-name">책상 자리</div>
@@ -416,7 +392,7 @@
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('change-new-modal')">취소</button>
+      <button class="btn btn-secondary" onclick="closeModal('change-new-modal');document.getElementById('my-modal').classList.add('show');">취소</button>
       <button class="btn" style="background:var(--accent2);color:#fff;flex:1" onclick="submitChange()">변경하기</button>
     </div>
   </div>
@@ -698,51 +674,96 @@ async function submitBooking(){
   showLoading(false);
 }
 
-// ── 취소 모달 ──
-function searchBooking(){
-  const phone=document.getElementById('cancel-phone').value.trim();
+// ── 내 수업 관리 (취소 + 변경 통합) ──
+function openMyBookings(){
+  document.getElementById('my-phone').value='';
+  document.getElementById('my-results').innerHTML='';
+  document.getElementById('my-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('my-phone').focus(),100);
+}
+
+function searchMyBookings(){
+  const phone=document.getElementById('my-phone').value.trim();
   if(!phone||phone.length<9){showToast('전화번호를 입력해주세요','error');return;}
-  const resultsDiv=document.getElementById('cancel-results');
+  const resultsDiv=document.getElementById('my-results');
   const found=[];
   Object.entries(allBookings).forEach(([key,bMap])=>{
     Object.entries(bMap).forEach(([id,b])=>{
       if(b.phone===phone&&b.status!=='cancelled'){
         const [dateStr,pi]=key.split('_');
         const d=new Date(dateStr);
-        if(!isDeadlinePassed(d))found.push({key,id,dateStr,pi:parseInt(pi),...b});
+        found.push({key,id,dateStr,pi:parseInt(pi),canModify:!isDeadlinePassed(d),...b});
       }
     });
   });
   found.sort((a,b)=>new Date(a.dateStr)-new Date(b.dateStr));
-  if(found.length===0){resultsDiv.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0">취소 가능한 신청 내역이 없습니다</div>';return;}
+  if(found.length===0){
+    resultsDiv.innerHTML='<div style="text-align:center;padding:24px;color:var(--text2);font-size:14px;">신청된 수업이 없습니다</div>';
+    return;
+  }
 
-  resultsDiv.innerHTML=found.map(b=>{
-    const p=PERIODS[b.pi];const d=new Date(b.dateStr);
-    const typeLabel=b.seatType==='desk'?'책상':'이젤';
-    const regularBadge=b.isRegular?`<span style="color:var(--regular);font-size:11px"> 🔄 정기</span>`:'';
-    return `
-      <div class="cancel-booking-item${b.isRegular?' is-regular':''}">
-        <p>📅 <strong>${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}</strong>${regularBadge}</p>
-        <p>자리: <strong>${typeLabel}</strong></p>
-        <button class="btn btn-secondary" style="margin-top:8px;width:100%;background:rgba(247,106,106,0.12);color:var(--danger);border-color:var(--danger);font-size:13px"
-          onclick="confirmCancel('${b.key}','${b.id}','${b.name}','${b.seatType}',${b.isRegular||false},'${b.regularId||''}','${b.phone}')">
-          이 수업 취소하기
-        </button>
-      </div>`;
-  }).join('');
+  resultsDiv.innerHTML = `
+    <div style="font-size:13px;font-weight:700;color:var(--text2);margin:12px 0 8px;">총 ${found.length}개 수업</div>
+    ${found.map(b=>{
+      const p=PERIODS[b.pi];const d=new Date(b.dateStr);
+      const typeLabel=b.seatType==='desk'?'책상':'이젤';
+      const regularBadge=b.isRegular?`<span style="background:var(--regular-light);color:var(--regular);padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">정기</span>`:'';
+      const statusBadge=b.status==='approved'
+        ?`<span style="background:var(--success-light);color:#065F46;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">승인</span>`
+        :`<span style="background:var(--warning-light);color:#92400E;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">대기</span>`;
+      const modifyBtns = b.canModify ? `
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}')"
+            style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
+            변경
+          </button>
+          <button onclick="confirmCancel('${b.key}','${b.id}','${b.name}','${b.seatType}',${b.isRegular||false},'${b.regularId||''}','${b.phone}')"
+            style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--danger);background:#fff;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
+            취소
+          </button>
+        </div>` : `<div style="margin-top:8px;font-size:12px;color:var(--text3);font-weight:500;">당일 수업 - 변경/취소 불가</div>`;
+      return `
+        <div class="cancel-booking-item${b.isRegular?' is-regular':''}">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+            <span style="font-weight:700;font-size:15px;color:var(--text)">${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}</span>
+            ${statusBadge} ${regularBadge}
+          </div>
+          <div style="font-size:13px;color:var(--text2);">${p.time} · ${typeLabel} 자리</div>
+          ${modifyBtns}
+        </div>`;
+    }).join('')}`;
+
+  // 조회 후 버튼 숨기기
+  document.getElementById('my-actions').style.display='none';
+}
+
+function openChangeFromMy(key,id,name,seatType,dateStr,pi,phone){
+  closeModal('my-modal');
+  changeTarget={key,id,name,seatType,dateStr,pi:parseInt(pi)};
+  changeNewPeriod=null; changeNewSeat=null;
+  const d=new Date(dateStr);
+  const p=PERIODS[parseInt(pi)];
+  document.getElementById('change-new-subtitle').textContent=`${name}님의 수업을 변경합니다`;
+  document.getElementById('change-from-info').textContent=`현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'책상':'이젤'}`;
+  const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);
+  document.getElementById('change-new-date').min=tomorrow.toISOString().slice(0,10);
+  document.getElementById('change-new-date').value='';
+  document.querySelectorAll('#change-period-btns .month-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('change-card-desk').className='seat-select-card disabled';
+  document.getElementById('change-card-easel').className='seat-select-card disabled';
+  document.getElementById('change-desk-remain').textContent='-';
+  document.getElementById('change-easel-remain').textContent='-';
+  document.getElementById('change-new-modal').classList.add('show');
 }
 
 async function confirmCancel(key,id,name,seatType,isRegular,regularId,phone){
   showLoading(true);
   try {
     if(isRegular&&regularId){
-      // 정기신청: 이 날짜만 취소할지 전체 취소할지
       const choice=confirm(`정기 신청 취소\n\n[확인] 이번 수업만 취소\n[취소] 정기 전체 취소`);
       if(choice){
-        // 이번 수업만 취소
         await db.ref(`bookings/${key}/${id}`).update({status:'cancelled'});
       } else {
-        // 정기 전체 취소 (같은 regularId 모두 취소)
         const updates={};
         Object.entries(allBookings).forEach(([k,bMap])=>{
           Object.entries(bMap).forEach(([bid,b])=>{
@@ -756,18 +777,13 @@ async function confirmCancel(key,id,name,seatType,isRegular,regularId,phone){
     } else {
       await db.ref(`bookings/${key}/${id}`).update({status:'cancelled'});
     }
-
-    // 이메일 알림
     const [dateStr,pi]=key.split('_');
     const p=PERIODS[parseInt(pi)],d=new Date(dateStr);
     await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
       subject:`수업 취소 - ${name}님`,
-      message:`수업 신청이 취소되었습니다.\n\n👤 이름: ${name}\n📅 날짜: ${d.getMonth()+1}/${d.getDate()}\n⏰ 수업: ${p.label}\n자리: ${seatType==='desk'?'책상':'이젤'}`
+      message:`수업 신청이 취소되었습니다.\n\n이름: ${name}\n날짜: ${d.getMonth()+1}/${d.getDate()}\n수업: ${p.label}\n자리: ${seatType==='desk'?'책상':'이젤'}`
     });
-
-    document.getElementById('cancel-results').innerHTML='';
-    document.getElementById('cancel-phone').value='';
-    closeModal('cancel-modal');
+    closeModal('my-modal');
     showToast(`${name}님 취소 완료`, 'success');
   } catch(e){showToast('취소 중 오류가 발생했습니다','error');console.error(e);}
   showLoading(false);
@@ -934,65 +950,6 @@ let changeTarget = null; // 변경할 기존 신청 정보
 let changeNewPeriod = null;
 let changeNewSeat = null;
 
-function searchForChange() {
-  const phone = document.getElementById('change-phone').value.trim();
-  if (!phone||phone.length<9){showToast('전화번호를 입력해주세요','error');return;}
-  const resultsDiv = document.getElementById('change-results');
-  const found = [];
-  Object.entries(allBookings).forEach(([key,bMap])=>{
-    Object.entries(bMap).forEach(([id,b])=>{
-      if(b.phone===phone&&b.status!=='cancelled'){
-        const [dateStr,pi]=key.split('_');
-        const d=new Date(dateStr);
-        if(!isDeadlinePassed(d)) found.push({key,id,dateStr,pi:parseInt(pi),...b});
-      }
-    });
-  });
-  found.sort((a,b)=>new Date(a.dateStr)-new Date(b.dateStr));
-  if(found.length===0){resultsDiv.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0">변경 가능한 신청 내역이 없습니다</div>';return;}
-  resultsDiv.innerHTML = found.map(b=>{
-    const p=PERIODS[b.pi];const d=new Date(b.dateStr);
-    const typeLabel=b.seatType==='desk'?'책상':'이젤';
-    return `
-      <div class="cancel-booking-item">
-        <p>📅 <strong>${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}</strong></p>
-        <p>자리: <strong>${typeLabel}</strong></p>
-        <button class="btn btn-secondary" style="margin-top:8px;width:100%;background:rgba(247,162,106,0.12);color:var(--accent2);border-color:var(--accent2);font-size:13px"
-          onclick="openChangeNewModal('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi})">
-          ✏️ 이 수업 변경하기
-        </button>
-      </div>`;
-  }).join('');
-}
-
-function openChangeNewModal(key, id, name, seatType, dateStr, pi) {
-  changeTarget = {key, id, name, seatType, dateStr, pi:parseInt(pi)};
-  changeNewPeriod = null;
-  changeNewSeat = null;
-  const d = new Date(dateStr);
-  const p = PERIODS[parseInt(pi)];
-  document.getElementById('change-new-subtitle').textContent = `${name}님의 수업을 변경합니다`;
-  document.getElementById('change-from-info').textContent =
-    `현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'책상':'이젤'}`;
-
-  // 날짜 최솟값 설정 (내일부터)
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate()+1);
-  const minDate = tomorrow.toISOString().slice(0,10);
-  document.getElementById('change-new-date').min = minDate;
-  document.getElementById('change-new-date').value = '';
-
-  // 교시 버튼 초기화
-  document.querySelectorAll('#change-period-btns .month-btn').forEach(b=>b.classList.remove('selected'));
-  document.getElementById('change-card-desk').className = 'seat-select-card disabled';
-  document.getElementById('change-card-easel').className = 'seat-select-card disabled';
-  document.getElementById('change-desk-remain').textContent = '-';
-  document.getElementById('change-easel-remain').textContent = '-';
-
-  closeModal('change-modal');
-  document.getElementById('change-new-modal').classList.add('show');
-}
-
 function updateChangeNewSlots() {
   if(changeNewPeriod===null) return;
   const dateVal = document.getElementById('change-new-date').value;
@@ -1079,10 +1036,9 @@ function showToast(msg,type='success'){
 }
 
 renderSchedule();
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('booking-modal');closeModal('cancel-modal');closeModal('change-modal');closeModal('change-new-modal');}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('booking-modal');closeModal('my-modal');closeModal('change-new-modal');}});
 document.getElementById('booking-modal').addEventListener('click',e=>{if(e.target.id==='booking-modal')closeModal('booking-modal');});
-document.getElementById('cancel-modal').addEventListener('click',e=>{if(e.target.id==='cancel-modal')closeModal('cancel-modal');});
-document.getElementById('change-modal').addEventListener('click',e=>{if(e.target.id==='change-modal')closeModal('change-modal');});
+document.getElementById('my-modal').addEventListener('click',e=>{if(e.target.id==='my-modal')closeModal('my-modal');});
 document.getElementById('change-new-modal').addEventListener('click',e=>{if(e.target.id==='change-new-modal')closeModal('change-new-modal');});
 </script>
 </body>
