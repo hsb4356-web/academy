@@ -596,7 +596,7 @@ function el(tag,cls,text){const e=document.createElement(tag);e.className=cls;e.
 // ── 신청 모달 ──
 function openModal(date,pi,key,deskLeft,easelLeft){
   selectedCell={date,pi,key,deskLeft,easelLeft};
-  selectedSeatType=null;bookingType='single';selectedMonths=0;
+  selectedSeatType=null;bookingType='single';selectedMonths=null;
   const p=PERIODS[pi];
   document.getElementById('modal-title').textContent=`${p.label} 신청`;
   document.getElementById('modal-subtitle').textContent=
@@ -625,7 +625,7 @@ function selectBookingType(type){
   document.getElementById('regular-options').style.display=type==='regular'?'block':'none';
   document.getElementById('submit-btn').textContent=type==='regular'?'정기 신청하기':'신청하기';
   document.getElementById('submit-btn').className=type==='regular'?'btn btn-regular':'btn btn-primary';
-  selectedMonths=0;
+  selectedMonths=null;
   document.querySelectorAll('.month-btn').forEach(b=>b.classList.remove('selected'));
   document.getElementById('regular-preview').textContent='';
 }
@@ -679,7 +679,7 @@ function formatPhone(input){
 
 async function submitBooking(){
   if(!selectedSeatType){showToast('자리 종류를 선택해주세요','error');return;}
-  if(bookingType==='regular'&&selectedMonths===0){showToast('신청 기간을 선택해주세요','error');return;}
+  if(bookingType==='regular'&&selectedMonths===null){showToast('신청 기간을 선택해주세요','error');return;}
   const name=document.getElementById('input-name').value.trim();
   const phone=document.getElementById('input-phone').value.trim();
   if(!name){showToast('이름을 입력해주세요','error');return;}
@@ -704,7 +704,7 @@ async function submitBooking(){
 
     // 정기신청: 이후 날짜들도 신청
     let regularCount=0;
-    if(bookingType==='regular'&&selectedMonths>=0){
+    if(bookingType==='regular'&&selectedMonths!==null){
       let futureDates=[];
       if(selectedMonths===0){
         // 이번달: 같은 요일로 이번달 말까지
@@ -732,17 +732,17 @@ async function submitBooking(){
     const p=PERIODS[selectedCell.pi];
     const d=new Date(selectedCell.date);
     const typeLabel=selectedSeatType==='desk'?'책상':'이젤';
-    const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
-    const regularInfo=bookingType==='regular'?`\n🔄 정기신청: ${selectedMonths}주(${weekLabel}) · 총 ${regularCount+1}회`:'';
+    const weekLabel=selectedMonths===0?'이번달':{4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
+    const regularInfo=bookingType==='regular'?`\n🔄 정기신청: ${weekLabel} · 총 ${regularCount+1}회`:'';
     await emailjs.send(EMAILJS_SERVICE_ID,EMAILJS_TEMPLATE_ID,{
       subject:`${bookingType==='regular'?'[정기] ':''}새 수업 신청 - ${name}님`,
       message:`새로운 수업 신청이 들어왔습니다!\n\n👤 이름: ${name}\n📱 전화번호: ${phone}\n📅 날짜: ${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[dayIdx(d)]})\n⏰ 수업: ${p.label} (${p.time})\n자리: ${typeLabel}${regularInfo}\n\n관리자 페이지에서 승인해주세요.`
     });
 
     closeModal('booking-modal');
-    const wLabel={4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
+    const wLabel=selectedMonths===0?'이번달':{4:'1개월',8:'2개월',12:'3개월'}[selectedMonths]||`${selectedMonths}주`;
     const msg=bookingType==='regular'
-      ?`${name}님 정기 신청 완료! ${selectedMonths}주(${wLabel}) 총 ${regularCount+1}회 ✅`
+      ?`${name}님 정기 신청 완료! ${wLabel} 총 ${regularCount+1}회 ✅`
       :`${name}님 ${typeLabel} 자리 신청 완료! ✅`;
     showToast(msg,'success');
   } catch(e){showToast('신청 중 오류가 발생했습니다','error');console.error(e);}
