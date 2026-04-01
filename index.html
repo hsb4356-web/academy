@@ -486,7 +486,11 @@ function getWeekDates(offset){
 }
 function dateKey(d){
   if(typeof d === 'string') return d.slice(0,10);
-  return d.toISOString().slice(0,10);
+  // toISOString은 UTC 기준이라 한국시간(UTC+9)에서 하루 밀릴 수 있으므로 로컬 날짜 사용
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
 }
 function cellKey(d,pi){return `${dateKey(d)}_${pi}`;}
 function formatDate(d){return `${d.getMonth()+1}/${d.getDate()}`;}
@@ -520,7 +524,8 @@ function showTab(tab){
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',(i===0&&tab==='student')||(i===1&&tab==='admin')));
   document.getElementById('student-view').style.display=tab==='student'?'':'none';
   document.getElementById('admin-view').style.display=tab==='admin'?'':'none';
-  if(tab==='admin')renderAdmin();
+  if(tab==='student') renderSchedule();
+  if(tab==='admin') renderAdmin();
 }
 function changeWeek(dir){currentWeekOffset+=dir;renderSchedule();if(adminLoggedIn)renderAdmin();}
 
@@ -938,6 +943,7 @@ function adminLogin(){
     adminLoggedIn=true;
     document.getElementById('admin-login-view').style.display='none';
     document.getElementById('admin-panel').style.display='';
+    renderSchedule(); // 시간표 셀 클릭 모드 전환
     renderAdmin();
   } else showToast('비밀번호가 틀렸습니다','error');
 }
