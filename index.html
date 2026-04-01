@@ -190,6 +190,25 @@
   .cancel-booking-item strong{color:var(--text);font-weight:700;}
   .cancel-booking-item.is-regular{border-left:4px solid var(--regular);}
 
+  /* 내 수업 달력 */
+  .my-calendar { margin-top: 12px; }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-header h4 { font-size: 16px; font-weight: 700; color: var(--text); }
+  .cal-nav { background: var(--surface2); border: 1px solid var(--border); color: var(--text); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-day-label { text-align: center; font-size: 11px; font-weight: 700; color: var(--text2); padding: 4px 0; }
+  .cal-day-label:first-child { color: #EF4444; }
+  .cal-day-label:last-child { color: #2563EB; }
+  .cal-cell { aspect-ratio: 1; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: default; font-size: 13px; font-weight: 500; color: var(--text2); position: relative; }
+  .cal-cell.has-booking { background: #EEF2FF; color: var(--accent); font-weight: 700; cursor: pointer; border: 1.5px solid var(--accent); }
+  .cal-cell.has-booking:active { transform: scale(0.95); }
+  .cal-cell.today-cell { background: var(--accent); color: #fff; font-weight: 700; }
+  .cal-cell.today-cell.has-booking { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent2); position: absolute; bottom: 3px; }
+  .cal-cell.today-cell .cal-dot { background: #fff; }
+  .cal-booking-detail { background: var(--surface2); border-radius: 12px; padding: 14px; margin-top: 12px; border: 1.5px solid var(--border); }
+  .cal-booking-detail h5 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 10px; }
+
   @media(max-width:480px){
     .schedule-grid,.toggle-closed-grid{grid-template-columns:48px repeat(7,1fr);gap:2px;}
     .seat-count{font-size:13px;}
@@ -261,6 +280,10 @@
 
     <div class="admin-section">
       <h3>📋 신청자 명단</h3>
+      <div style="margin-bottom:12px;">
+        <input type="text" id="admin-search" placeholder="이름 또는 전화번호로 검색..." oninput="renderBookingsList()"
+          style="width:100%;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 16px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+      </div>
       <div class="filter-bar">
         <button class="filter-btn active" onclick="setFilter('all',this)">전체</button>
         <button class="filter-btn" onclick="setFilter('pending',this)">대기중</button>
@@ -275,6 +298,20 @@
     </div>
   </div>
 </main>
+
+<!-- 시간표 셀 상세 모달 (관리자용) -->
+<div class="modal-overlay" id="cell-detail-modal">
+  <div class="modal">
+    <span class="modal-handle"></span>
+    <button class="modal-close" onclick="closeModal('cell-detail-modal')">✕</button>
+    <h3 id="cell-detail-title">수업 현황</h3>
+    <div class="modal-subtitle" id="cell-detail-subtitle"></div>
+    <div id="cell-detail-content"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeModal('cell-detail-modal')">닫기</button>
+    </div>
+  </div>
+</div>
 
 <!-- 신청 모달 -->
 <div class="modal-overlay" id="booking-modal">
@@ -304,6 +341,7 @@
     <div class="regular-options" id="regular-options" style="display:none">
       <label>신청 기간 선택</label>
       <div class="month-btns">
+        <button class="month-btn" onclick="selectMonths(0,this)">이번달</button>
         <button class="month-btn" onclick="selectMonths(4,this)">4주 (1개월)</button>
         <button class="month-btn" onclick="selectMonths(8,this)">8주 (2개월)</button>
         <button class="month-btn" onclick="selectMonths(12,this)">12주 (3개월)</button>
@@ -338,7 +376,7 @@
   </div>
 </div>
 
-<!-- 내 수업 관리 모달 (취소 + 변경 통합) -->
+<!-- 내 수업 관리 모달 (달력 뷰) -->
 <div class="modal-overlay" id="my-modal">
   <div class="modal">
     <span class="modal-handle"></span>
@@ -531,8 +569,16 @@ function renderSchedule(){
           </div>
           ${deadlinePassed?'<div style="font-size:9px;color:var(--text3);margin-top:2px;font-weight:600;">신청마감</div>':''}
         `;
-        if(anyLeft&&!deadlinePassed){cell.onclick=()=>openModal(d,pi,key,deskLeft,easelLeft);}
-        else{cell.style.cursor='not-allowed';if(deadlinePassed)cell.style.opacity='0.6';}
+        if(adminLoggedIn){
+          // 관리자: 항상 클릭 가능 - 셀 상세 팝업
+          cell.style.cursor='pointer';
+          cell.onclick=()=>openCellDetail(d,pi,key);
+        } else if(anyLeft&&!deadlinePassed){
+          cell.onclick=()=>openModal(d,pi,key,deskLeft,easelLeft);
+        } else {
+          cell.style.cursor='not-allowed';
+          if(deadlinePassed)cell.style.opacity='0.6';
+        }
       }
       grid.appendChild(cell);
     });
@@ -581,12 +627,26 @@ function selectMonths(n,btn){
   selectedMonths=n;
   document.querySelectorAll('.month-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');
-  // 미리보기
-  const dates=getRegularDates(selectedCell.date,n);
   const preview=document.getElementById('regular-preview');
-  if(dates.length===0){preview.innerHTML='<span style="color:var(--danger)">신청 가능한 날짜가 없습니다</span>';return;}
-  const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[n]||`${n}주`;
-  preview.innerHTML=`매주 <span>${DAYS[dayIdx(selectedCell.date)]}요일 ${PERIODS[selectedCell.pi].label}</span> · <span>${n}주(${weekLabel})</span> · 총 <span>${dates.length+1}회</span> (이번 수업 포함)`;
+  if(n===0){
+    // 이번달: 오늘부터 이번달 말까지 같은 요일
+    const startDate=new Date(selectedCell.date);
+    const endOfMonth=new Date(startDate.getFullYear(),startDate.getMonth()+1,0);
+    const dates=[];
+    const cur=new Date(startDate);
+    cur.setDate(cur.getDate()+7);
+    while(cur<=endOfMonth){dates.push(new Date(cur));cur.setDate(cur.getDate()+7);}
+    if(dates.length===0){
+      preview.innerHTML=`<span style="color:var(--danger)">이번달 남은 같은 요일이 없습니다</span>`;
+    } else {
+      preview.innerHTML=`매주 <span>${DAYS[dayIdx(selectedCell.date)]}요일 ${PERIODS[selectedCell.pi].label}</span> · <span>이번달</span> · 총 <span>${dates.length+1}회</span> (이번 수업 포함)`;
+    }
+  } else {
+    const dates=getRegularDates(selectedCell.date,n);
+    if(dates.length===0){preview.innerHTML='<span style="color:var(--danger)">신청 가능한 날짜가 없습니다</span>';return;}
+    const weekLabel={4:'1개월',8:'2개월',12:'3개월'}[n]||`${n}주`;
+    preview.innerHTML=`매주 <span>${DAYS[dayIdx(selectedCell.date)]}요일 ${PERIODS[selectedCell.pi].label}</span> · <span>${n}주(${weekLabel})</span> · 총 <span>${dates.length+1}회</span> (이번 수업 포함)`;
+  }
 }
 
 function selectSeatType(type){
@@ -637,10 +697,18 @@ async function submitBooking(){
 
     // 정기신청: 이후 날짜들도 신청
     let regularCount=0;
-    if(bookingType==='regular'&&selectedMonths>0){
-      // selectedCell.date를 새 Date 객체로 확실히 변환
-      const startDate = new Date(selectedCell.date);
-      const futureDates=getRegularDates(startDate, selectedMonths);
+    if(bookingType==='regular'&&selectedMonths>=0){
+      let futureDates=[];
+      if(selectedMonths===0){
+        // 이번달: 같은 요일로 이번달 말까지
+        const startDate=new Date(selectedCell.date);
+        const endOfMonth=new Date(startDate.getFullYear(),startDate.getMonth()+1,0);
+        const cur=new Date(startDate);
+        cur.setDate(cur.getDate()+7);
+        while(cur<=endOfMonth){futureDates.push(new Date(cur));cur.setDate(cur.getDate()+7);}
+      } else {
+        futureDates=getRegularDates(new Date(selectedCell.date),selectedMonths);
+      }
       for(const futureDate of futureDates){
         const fKey=cellKey(futureDate,selectedCell.pi);
         if(allClosed[fKey])continue;
@@ -674,10 +742,17 @@ async function submitBooking(){
   showLoading(false);
 }
 
-// ── 내 수업 관리 (취소 + 변경 통합) ──
+// ── 내 수업 관리 (달력 뷰) ──
+let myCalYear = new Date().getFullYear();
+let myCalMonth = new Date().getMonth();
+let myBookingsData = [];
+
 function openMyBookings(){
+  myCalYear = new Date().getFullYear();
+  myCalMonth = new Date().getMonth();
   document.getElementById('my-phone').value='';
   document.getElementById('my-results').innerHTML='';
+  document.getElementById('my-actions').style.display='flex';
   document.getElementById('my-modal').classList.add('show');
   setTimeout(()=>document.getElementById('my-phone').focus(),100);
 }
@@ -685,56 +760,124 @@ function openMyBookings(){
 function searchMyBookings(){
   const phone=document.getElementById('my-phone').value.trim();
   if(!phone||phone.length<9){showToast('전화번호를 입력해주세요','error');return;}
-  const resultsDiv=document.getElementById('my-results');
-  const found=[];
+
+  myBookingsData=[];
   Object.entries(allBookings).forEach(([key,bMap])=>{
     Object.entries(bMap).forEach(([id,b])=>{
       if(b.phone===phone&&b.status!=='cancelled'){
         const [dateStr,pi]=key.split('_');
-        const d=new Date(dateStr);
-        found.push({key,id,dateStr,pi:parseInt(pi),canModify:!isDeadlinePassed(d),...b});
+        myBookingsData.push({key,id,dateStr,pi:parseInt(pi),canModify:!isDeadlinePassed(new Date(dateStr)),...b});
       }
     });
   });
-  found.sort((a,b)=>new Date(a.dateStr)-new Date(b.dateStr));
-  if(found.length===0){
-    resultsDiv.innerHTML='<div style="text-align:center;padding:24px;color:var(--text2);font-size:14px;">신청된 수업이 없습니다</div>';
+  myBookingsData.sort((a,b)=>new Date(a.dateStr)-new Date(b.dateStr));
+
+  if(myBookingsData.length===0){
+    document.getElementById('my-results').innerHTML='<div style="text-align:center;padding:24px;color:var(--text2);font-size:14px;">신청된 수업이 없습니다</div>';
+    document.getElementById('my-actions').style.display='flex';
     return;
   }
 
-  resultsDiv.innerHTML = `
-    <div style="font-size:13px;font-weight:700;color:var(--text2);margin:12px 0 8px;">총 ${found.length}개 수업</div>
-    ${found.map(b=>{
-      const p=PERIODS[b.pi];const d=new Date(b.dateStr);
-      const typeLabel=b.seatType==='desk'?'책상':'이젤';
-      const regularBadge=b.isRegular?`<span style="background:var(--regular-light);color:var(--regular);padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">정기</span>`:'';
-      const statusBadge=b.status==='approved'
-        ?`<span style="background:var(--success-light);color:#065F46;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">승인</span>`
-        :`<span style="background:var(--warning-light);color:#92400E;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">대기</span>`;
-      const modifyBtns = b.canModify ? `
-        <div style="display:flex;gap:8px;margin-top:10px;">
-          <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}')"
-            style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
-            변경
-          </button>
-          <button onclick="confirmCancel('${b.key}','${b.id}','${b.name}','${b.seatType}',${b.isRegular||false},'${b.regularId||''}','${b.phone}')"
-            style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--danger);background:#fff;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
-            취소
-          </button>
-        </div>` : `<div style="margin-top:8px;font-size:12px;color:var(--text3);font-weight:500;">당일 수업 - 변경/취소 불가</div>`;
-      return `
-        <div class="cancel-booking-item${b.isRegular?' is-regular':''}">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
-            <span style="font-weight:700;font-size:15px;color:var(--text)">${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}</span>
-            ${statusBadge} ${regularBadge}
-          </div>
-          <div style="font-size:13px;color:var(--text2);">${p.time} · ${typeLabel} 자리</div>
-          ${modifyBtns}
-        </div>`;
-    }).join('')}`;
-
-  // 조회 후 버튼 숨기기
   document.getElementById('my-actions').style.display='none';
+  renderMyCalendar();
+}
+
+function renderMyCalendar(){
+  const resultsDiv=document.getElementById('my-results');
+  const year=myCalYear, month=myCalMonth;
+  const monthName=`${year}년 ${month+1}월`;
+
+  // 이번달 신청 내역 날짜 set
+  const bookedDates={};
+  myBookingsData.forEach(b=>{
+    const d=new Date(b.dateStr);
+    if(d.getFullYear()===year&&d.getMonth()===month){
+      const key=b.dateStr;
+      if(!bookedDates[key]) bookedDates[key]=[];
+      bookedDates[key].push(b);
+    }
+  });
+
+  const firstDay=new Date(year,month,1).getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const today=new Date();
+  const todayStr=dateKey(today);
+  const startOffset=firstDay===0?6:firstDay-1; // 월요일 시작
+
+  let calHtml=`
+    <div class="my-calendar">
+      <div class="cal-header">
+        <button class="cal-nav" onclick="changeMyCalMonth(-1)">&#8592;</button>
+        <h4>${monthName} · 총 ${myBookingsData.length}개</h4>
+        <button class="cal-nav" onclick="changeMyCalMonth(1)">&#8594;</button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-day-label">일</div><div class="cal-day-label">월</div>
+        <div class="cal-day-label">화</div><div class="cal-day-label">수</div>
+        <div class="cal-day-label">목</div><div class="cal-day-label">금</div>
+        <div class="cal-day-label">토</div>
+  `;
+
+  // 빈 칸 (일요일 시작이므로 조정)
+  const firstDayAdj=firstDay; // 0=일
+  for(let i=0;i<firstDayAdj;i++) calHtml+=`<div class="cal-cell"></div>`;
+
+  for(let d=1;d<=daysInMonth;d++){
+    const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday2=dateStr===todayStr;
+    const bookings=bookedDates[dateStr];
+    let cls='cal-cell';
+    if(isToday2) cls+=' today-cell';
+    if(bookings) cls+=' has-booking';
+    calHtml+=`<div class="${cls}" ${bookings?`onclick="showDayBookings('${dateStr}')"`:''}>${d}${bookings?'<span class="cal-dot"></span>':''}</div>`;
+  }
+
+  calHtml+=`</div><div id="cal-detail"></div></div>`;
+  resultsDiv.innerHTML=calHtml;
+}
+
+function changeMyCalMonth(dir){
+  myCalMonth+=dir;
+  if(myCalMonth>11){myCalMonth=0;myCalYear++;}
+  if(myCalMonth<0){myCalMonth=11;myCalYear--;}
+  renderMyCalendar();
+}
+
+function showDayBookings(dateStr){
+  const d=new Date(dateStr);
+  const dayBookings=myBookingsData.filter(b=>b.dateStr===dateStr);
+  const detail=document.getElementById('cal-detail');
+  if(!detail||dayBookings.length===0) return;
+
+  detail.innerHTML=`
+    <div class="cal-booking-detail">
+      <h5>${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) 수업</h5>
+      ${dayBookings.map(b=>{
+        const p=PERIODS[b.pi];
+        const typeLabel=b.seatType==='desk'?'책상':'이젤';
+        const statusBadge=b.status==='approved'
+          ?`<span style="background:var(--success-light);color:#065F46;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">승인</span>`
+          :`<span style="background:var(--warning-light);color:#92400E;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">대기</span>`;
+        const regularBadge=b.isRegular?`<span style="background:var(--regular-light);color:var(--regular);padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">정기</span>`:'';
+        const modifyBtns=b.canModify?`
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}')"
+              style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">변경</button>
+            <button onclick="confirmCancel('${b.key}','${b.id}','${b.name}','${b.seatType}',${b.isRegular||false},'${b.regularId||''}','${b.phone}')"
+              style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--danger);background:#fff;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">취소</button>
+          </div>`
+          :`<div style="margin-top:8px;font-size:12px;color:var(--text3);font-weight:500;">당일 수업 - 변경/취소 불가</div>`;
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+              <span style="font-weight:700;font-size:14px;">${p.label} ${p.time}</span>
+              ${statusBadge} ${regularBadge}
+            </div>
+            <div style="font-size:13px;color:var(--text2);">${typeLabel} 자리</div>
+            ${modifyBtns}
+          </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function openChangeFromMy(key,id,name,seatType,dateStr,pi,phone){
@@ -876,6 +1019,9 @@ function setFilter(f,btn){currentFilter=f;document.querySelectorAll('.filter-btn
 
 function renderBookingsList(){
   const list=document.getElementById('bookings-list');list.innerHTML='';
+  const searchEl=document.getElementById('admin-search');
+  const searchQ=(searchEl?searchEl.value.trim():'').toLowerCase();
+
   let all=[];
   Object.entries(allBookings).forEach(([key,bMap])=>{
     const [dateStr,pi]=key.split('_');
@@ -888,6 +1034,14 @@ function renderBookingsList(){
   else if(currentFilter==='desk')all=all.filter(b=>b.seatType==='desk');
   else if(currentFilter==='easel')all=all.filter(b=>b.seatType==='easel');
   else if(currentFilter==='regular')all=all.filter(b=>b.isRegular);
+
+  // 검색 필터
+  if(searchQ){
+    all=all.filter(b=>
+      b.name.toLowerCase().includes(searchQ) ||
+      (b.phone||'').replace(/-/g,'').includes(searchQ.replace(/-/g,''))
+    );
+  }
 
   if(all.length===0){list.innerHTML='<div class="empty-state">해당 내역이 없습니다</div>';return;}
   all.forEach(b=>{
@@ -911,6 +1065,67 @@ function renderBookingsList(){
       </div>`;
     list.appendChild(card);
   });
+}
+
+// ── 관리자 시간표 셀 상세 팝업 ──
+function openCellDetail(date, pi, key){
+  const p=PERIODS[pi];
+  const d=new Date(date);
+  const closed=allClosed[key];
+  const list=allBookings[key]?Object.entries(allBookings[key]).filter(([,b])=>b.status!=='cancelled'):[];
+  const deskUsed=list.filter(([,b])=>b.seatType==='desk').length;
+  const easelUsed=list.filter(([,b])=>b.seatType==='easel').length;
+
+  document.getElementById('cell-detail-title').textContent=
+    `${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}`;
+  document.getElementById('cell-detail-subtitle').textContent=
+    `${p.time} · 책상 ${deskUsed}/${MAX_DESK}명 · 이젤 ${easelUsed}/${MAX_EASEL}명`;
+
+  const content=document.getElementById('cell-detail-content');
+
+  if(closed){
+    content.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text2);font-weight:600;">휴강</div>`;
+    document.getElementById('cell-detail-modal').classList.add('show');
+    return;
+  }
+
+  if(list.length===0){
+    content.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text2);">신청자 없음</div>`;
+    document.getElementById('cell-detail-modal').classList.add('show');
+    return;
+  }
+
+  content.innerHTML=list.map(([id,b])=>{
+    const statusLabel={pending:'대기중',approved:'승인됨'}[b.status]||b.status;
+    const statusCls={pending:'status-pending',approved:'status-approved'}[b.status]||'';
+    const typeLabel=b.seatType==='desk'?'책상':'이젤';
+    const regularBadge=b.isRegular?`<span style="background:var(--regular-light);color:var(--regular);padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;">정기</span>`:'';
+    return `
+      <div class="booking-card" style="margin-bottom:8px;">
+        <div class="booking-info">
+          <div class="booking-name">${b.name} <span class="type-badge-${b.seatType}">${typeLabel}</span> ${regularBadge}</div>
+          <div class="booking-detail">${b.phone}</div>
+        </div>
+        <span class="status-badge ${statusCls}">${statusLabel}</span>
+        <div class="booking-actions">
+          ${b.status==='pending'?`<button class="small-btn small-btn-approve" onclick="updateStatusAndRefresh('${key}','${id}','approved','${b.name}','${date}',${pi})">승인</button>`:''}
+          <button class="small-btn small-btn-cancel" onclick="updateStatusAndRefresh('${key}','${id}','cancelled','${b.name}','${date}',${pi})">취소</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('cell-detail-modal').classList.add('show');
+}
+
+async function updateStatusAndRefresh(key,id,status,name,date,pi){
+  showLoading(true);
+  try{
+    await db.ref(`bookings/${key}/${id}`).update({status});
+    showToast(status==='approved'?`${name}님 승인 ✅`:`${name}님 취소`,status==='approved'?'success':'error');
+    // 팝업 내용 갱신
+    openCellDetail(new Date(date),pi,key);
+  } catch(e){showToast('오류가 발생했습니다','error');}
+  showLoading(false);
 }
 async function updateStatus(key,id,status,name){
   showLoading(true);
@@ -1036,10 +1251,11 @@ function showToast(msg,type='success'){
 }
 
 renderSchedule();
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('booking-modal');closeModal('my-modal');closeModal('change-new-modal');}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal('booking-modal');closeModal('my-modal');closeModal('change-new-modal');closeModal('cell-detail-modal');}});
 document.getElementById('booking-modal').addEventListener('click',e=>{if(e.target.id==='booking-modal')closeModal('booking-modal');});
 document.getElementById('my-modal').addEventListener('click',e=>{if(e.target.id==='my-modal')closeModal('my-modal');});
 document.getElementById('change-new-modal').addEventListener('click',e=>{if(e.target.id==='change-new-modal')closeModal('change-new-modal');});
+document.getElementById('cell-detail-modal').addEventListener('click',e=>{if(e.target.id==='cell-detail-modal')closeModal('cell-detail-modal');});
 </script>
 </body>
 </html>
