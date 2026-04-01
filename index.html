@@ -965,6 +965,10 @@ function renderAdmin(){
   renderBookingsList();
 }
 
+// ── 수강 현황표 ──
+let rosterMonthYear = new Date().getFullYear();
+let rosterMonthMonth = new Date().getMonth();
+
 function changeRosterMonth(dir){
   rosterMonthMonth += dir;
   if(rosterMonthMonth > 11){rosterMonthMonth=0; rosterMonthYear++;}
