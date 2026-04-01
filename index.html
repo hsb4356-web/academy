@@ -273,9 +273,8 @@
 
     <div class="admin-section">
       <h3>👥 주간 수강 현황표</h3>
-      <div style="overflow-x:auto;">
-        <table id="overview-table" style="width:100%;border-collapse:collapse;font-size:12px;"></table>
-      </div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">수업 셀을 클릭하면 신청자 목록을 확인하고 승인/취소할 수 있습니다</p>
+      <div class="schedule-grid" id="admin-schedule-grid"></div>
     </div>
 
     <div class="admin-section">
@@ -292,6 +291,7 @@
         <button class="filter-btn" onclick="setFilter('desk',this)">책상</button>
         <button class="filter-btn" onclick="setFilter('easel',this)">이젤</button>
         <button class="filter-btn" onclick="setFilter('regular',this)">🔄 정기</button>
+        <button class="filter-btn" style="color:#065F46;border-color:#10B981;background:#ECFDF5;font-weight:700;" onclick="approveAllPending()">✅ 대기중 일괄승인</button>
         <button class="filter-btn" style="color:var(--danger);border-color:var(--danger)" onclick="deleteAllCancelled()">🗑️ 취소 전체삭제</button>
       </div>
       <div class="bookings-list" id="bookings-list"></div>
@@ -475,8 +475,8 @@ let adminLoggedIn=false, currentFilter='all';
 let allBookings={}, allClosed={};
 
 // ── Firebase 실시간 연동 ──
-db.ref('bookings').on('value', snap=>{allBookings=snap.val()||{};renderSchedule();if(adminLoggedIn){renderOverviewTable(getWeekDates(currentWeekOffset));renderBookingsList();}});
-db.ref('closed').on('value', snap=>{allClosed=snap.val()||{};renderSchedule();if(adminLoggedIn)renderToggleGrid(getWeekDates(currentWeekOffset));});
+db.ref('bookings').on('value', snap=>{allBookings=snap.val()||{};renderSchedule();if(adminLoggedIn){renderAdminScheduleGrid(getWeekDates(currentWeekOffset));renderBookingsList();}});
+db.ref('closed').on('value', snap=>{allClosed=snap.val()||{};renderSchedule();if(adminLoggedIn){renderToggleGrid(getWeekDates(currentWeekOffset));renderAdminScheduleGrid(getWeekDates(currentWeekOffset));}});
 
 // ── 유틸 ──
 function getWeekDates(offset){
@@ -522,8 +522,8 @@ function getRegularDates(startDate, weeks){
 // ── 탭 ──
 function showTab(tab){
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',(i===0&&tab==='student')||(i===1&&tab==='admin')));
-  document.getElementById('student-view').style.display=tab==='student'?'':'none';
-  document.getElementById('admin-view').style.display=tab==='admin'?'':'none';
+  document.getElementById('student-view').style.display=tab==='student'?'block':'none';
+  document.getElementById('admin-view').style.display=tab==='admin'?'block':'none';
   if(tab==='student') renderSchedule();
   if(tab==='admin') renderAdmin();
 }
@@ -532,8 +532,10 @@ function changeWeek(dir){currentWeekOffset+=dir;renderSchedule();if(adminLoggedI
 // ── 스케줄 렌더 ──
 function renderSchedule(){
   const dates=getWeekDates(currentWeekOffset);
-  document.getElementById('week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
+  const weekTitleEl=document.getElementById('week-title');
+  if(weekTitleEl) weekTitleEl.textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
   const grid=document.getElementById('schedule-grid');
+  if(!grid) return;
   grid.innerHTML='';
   grid.appendChild(el('div','grid-header',''));
   dates.forEach(d=>{
@@ -947,64 +949,70 @@ function adminLogin(){
     renderAdmin();
   } else showToast('비밀번호가 틀렸습니다','error');
 }
-function renderAdmin() {
-  if (!adminLoggedIn) return;
-  const dates = getWeekDates(currentWeekOffset);
-  document.getElementById('admin-week-title').textContent = `${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
+function renderAdmin(){
+  if(!adminLoggedIn)return;
+  const dates=getWeekDates(currentWeekOffset);
+  document.getElementById('admin-week-title').textContent=`${formatDate(dates[0])} ~ ${formatDate(dates[6])}`;
   renderToggleGrid(dates);
-  renderOverviewTable(dates);
+  renderAdminScheduleGrid(dates);
   renderBookingsList();
 }
-function renderOverviewTable(dates) {
-  const table = document.getElementById('overview-table');
-  if (!table) return;
 
-  const thStyle = `padding:8px 6px;text-align:center;font-weight:700;font-size:11px;background:#F0F2F8;border:1px solid #E2E5EF;white-space:nowrap;`;
-  const tdStyle = `padding:6px 4px;text-align:center;border:1px solid #E2E5EF;vertical-align:top;font-size:11px;`;
+function renderAdminScheduleGrid(dates){
+  const grid=document.getElementById('admin-schedule-grid');
+  if(!grid)return;
+  grid.innerHTML='';
 
-  // 헤더행: 교시 + 요일별 날짜
-  let html = `<thead><tr>
-    <th style="${thStyle}">교시</th>
-    ${dates.map(d=>`<th style="${thStyle}${isToday(d)?'color:#4F46E5;':''}">${DAYS[dayIdx(d)]}<br>${formatDate(d)}</th>`).join('')}
-  </tr></thead><tbody>`;
-
-  PERIODS.forEach((p, pi) => {
-    html += `<tr><td style="${thStyle}">${p.label}<br><span style="font-weight:400;color:#6B7280">${p.time}</span></td>`;
-    dates.forEach(d => {
-      const key = cellKey(d, pi);
-      const closed = allClosed[key];
-      const list = allBookings[key] ? Object.values(allBookings[key]).filter(b => b.status !== 'cancelled') : [];
-      const deskList = list.filter(b => b.seatType === 'desk');
-      const easelList = list.filter(b => b.seatType === 'easel');
-
-      if (closed) {
-        html += `<td style="${tdStyle}background:#F9FAFB;"><span style="color:#9CA3AF;font-weight:600;">휴강</span></td>`;
-      } else if (list.length === 0) {
-        html += `<td style="${tdStyle}color:#D1D5DB;">-</td>`;
-      } else {
-        let content = '';
-        if (deskList.length > 0) {
-          content += `<div style="margin-bottom:3px;"><span style="background:#DBEAFE;color:#1D4ED8;padding:1px 4px;border-radius:4px;font-weight:700;font-size:10px;">책상 ${deskList.length}</span></div>`;
-          content += deskList.map(b =>
-            `<div style="color:#1E1E2E;font-weight:500;padding:1px 0;border-bottom:1px dashed #F0F2F8">${b.name}</div>`
-          ).join('');
-        }
-        if (easelList.length > 0) {
-          content += `<div style="margin-top:3px;margin-bottom:3px;"><span style="background:#FFEDD5;color:#C2410C;padding:1px 4px;border-radius:4px;font-weight:700;font-size:10px;">이젤 ${easelList.length}</span></div>`;
-          content += easelList.map(b =>
-            `<div style="color:#1E1E2E;font-weight:500;padding:1px 0;border-bottom:1px dashed #F0F2F8">${b.name}</div>`
-          ).join('');
-        }
-        const totalLeft = (MAX_DESK - deskList.length) + (MAX_EASEL - easelList.length);
-        const bgColor = totalLeft === 0 ? '#FEF2F2' : totalLeft <= 2 ? '#FFFBEB' : '#fff';
-        html += `<td style="${tdStyle}background:${bgColor};">${content}<div style="margin-top:4px;font-size:10px;color:#9CA3AF;">잔여${totalLeft}</div></td>`;
-      }
-    });
-    html += '</tr>';
+  // 헤더
+  grid.appendChild(el('div','grid-header',''));
+  dates.forEach(d=>{
+    const h=el('div','grid-header'+(isToday(d)?' today':''),`${DAYS[dayIdx(d)]}\n${formatDate(d)}`);
+    h.style.whiteSpace='pre';grid.appendChild(h);
   });
 
-  html += '</tbody>';
-  table.innerHTML = html;
+  PERIODS.forEach((p,pi)=>{
+    const tl=document.createElement('div');
+    tl.className='time-label';
+    const times=p.time.split('~');
+    tl.innerHTML=`<span style="font-weight:700;font-size:11px;color:var(--accent)">${p.label}</span><span style="font-size:9px;color:var(--text2)">${times[0].trim()}</span><span style="font-size:9px;color:var(--text2)">~${times[1].trim()}</span>`;
+    grid.appendChild(tl);
+
+    dates.forEach(d=>{
+      const key=cellKey(d,pi);
+      const closed=allClosed[key];
+      const list=allBookings[key]?Object.values(allBookings[key]).filter(b=>b.status!=='cancelled'):[];
+      const deskUsed=list.filter(b=>b.seatType==='desk').length;
+      const easelUsed=list.filter(b=>b.seatType==='easel').length;
+      const total=list.length;
+
+      const cell=document.createElement('div');
+      cell.className='class-cell'+(closed?' closed':'');
+      cell.style.cursor='pointer';
+
+      if(closed){
+        cell.innerHTML=`<div class="cell-closed-label">휴강</div>`;
+      } else if(total===0){
+        cell.innerHTML=`
+          <div class="seat-row">
+            <div class="seat-badge desk"><span class="seat-count">0</span><span class="seat-label-text">책상/${MAX_DESK}</span></div>
+            <div class="seat-badge easel"><span class="seat-count">0</span><span class="seat-label-text">이젤/${MAX_EASEL}</span></div>
+          </div>`;
+      } else {
+        const deskLeft=MAX_DESK-deskUsed;
+        const easelLeft=MAX_EASEL-easelUsed;
+        cell.style.borderColor='var(--accent)';
+        cell.style.background='#F5F3FF';
+        cell.innerHTML=`
+          <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px;">${total}명</div>
+          <div class="seat-row">
+            <div class="seat-badge desk${deskLeft<=0?' full-type':''}"><span class="seat-count">${deskLeft<=0?'✕':deskLeft}</span><span class="seat-label-text">책상/${MAX_DESK}</span></div>
+            <div class="seat-badge easel${easelLeft<=0?' full-type':''}"><span class="seat-count">${easelLeft<=0?'✕':easelLeft}</span><span class="seat-label-text">이젤/${MAX_EASEL}</span></div>
+          </div>`;
+      }
+      cell.onclick=()=>openCellDetail(d,pi,key);
+      grid.appendChild(cell);
+    });
+  });
 }
 
 function renderToggleGrid(dates){
@@ -1147,6 +1155,29 @@ async function deleteBooking(key,id,name){
     await db.ref(`bookings/${key}/${id}`).remove();
     showToast(`${name}님 내역이 삭제됐습니다`,'success');
   } catch(e){showToast('삭제 중 오류가 발생했습니다','error');}
+  showLoading(false);
+}
+
+async function approveAllPending(){
+  // 대기중인 신청 수 확인
+  let pendingList=[];
+  Object.entries(allBookings).forEach(([key,bMap])=>{
+    Object.entries(bMap).forEach(([id,b])=>{
+      if(b.status==='pending') pendingList.push({key,id});
+    });
+  });
+  if(pendingList.length===0){showToast('대기중인 신청이 없습니다','error');return;}
+  if(!confirm(`대기중인 신청 ${pendingList.length}건을 모두 승인할까요?`))return;
+
+  showLoading(true);
+  try{
+    const updates={};
+    pendingList.forEach(({key,id})=>{
+      updates[`bookings/${key}/${id}/status`]='approved';
+    });
+    await db.ref().update(updates);
+    showToast(`${pendingList.length}건 일괄 승인 완료 ✅`,'success');
+  } catch(e){showToast('오류가 발생했습니다','error');}
   showLoading(false);
 }
 
