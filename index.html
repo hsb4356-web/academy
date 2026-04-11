@@ -1176,28 +1176,57 @@ function showDayBookings(dateStr){
 
         let modifyBtns = '';
         const pastDeadline = isDeadlinePassed(new Date(dateStr));
+        const todayStr = dateKey(new Date());
+        const isBookedToday = b.time && b.time.slice(0,10) === todayStr; // 오늘 신청했는지
+        const isChangedToday = b.changedFrom && b.time && b.time.slice(0,10) === todayStr; // 오늘 변경된 수업인지
 
         if(pastDeadline){
           modifyBtns = `<div style="margin-top:8px;font-size:12px;color:var(--text3);font-weight:500;">지난 수업 - 변경 불가</div>`;
-        } else if(!b.isRegular){
-          modifyBtns = `<div style="margin-top:8px;background:#FEF2F2;border-radius:8px;padding:8px 12px;font-size:12px;color:#991B1B;font-weight:600;">자유 신청은 취소/변경이 불가합니다</div>`;
+        } else if(!b.isRegular && !b.changedFrom){
+          // 자유 신청: 당일에 한해 1회 변경 가능
+          if(isBookedToday){
+            modifyBtns = `
+              <div style="display:flex;gap:8px;margin-top:10px;">
+                <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}','single')"
+                  style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 변경</button>
+              </div>
+              <div style="margin-top:6px;font-size:11px;color:var(--text3);">자유 신청 당일 1회 변경 가능 · 변경 후 재변경 불가</div>`;
+          } else {
+            modifyBtns = `<div style="margin-top:8px;background:#FEF2F2;border-radius:8px;padding:8px 12px;font-size:12px;color:#991B1B;font-weight:600;">자유 신청은 당일에만 변경 가능합니다</div>`;
+          }
+        } else if(b.changedFrom){
+          // 변경된 수업 (자유→변경 또는 정기→변경): 당일에 한해 재변경 가능
+          if(isChangedToday){
+            modifyBtns = `
+              <div style="display:flex;gap:8px;margin-top:10px;">
+                <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}','changed')"
+                  style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 재변경</button>
+              </div>
+              <div style="margin-top:6px;font-size:11px;color:var(--text3);">변경된 수업 당일 1회 재변경 가능</div>`;
+          } else {
+            modifyBtns = `<div style="margin-top:8px;font-size:12px;color:var(--text3);font-weight:500;">변경된 수업은 당일에만 재변경 가능합니다</div>`;
+          }
         } else if(!canChangeByPolicy(b.dateStr)){
           modifyBtns = `<div style="margin-top:8px;font-size:12px;color:var(--text3);font-weight:500;">변경 기한 초과 (수업 주 포함 다음 주 일요일까지)</div>`;
         } else {
-          // 변경 횟수 체크
+          // 정기 신청: 승인 전 무제한, 승인 후 월 1회
           const regularMonth = b.regularMonth || b.dateStr.slice(0,7);
           const usedCount = getUsedChangeCount(b.phone, regularMonth);
-          const maxChange = 1; // 월 1회
+          const maxChange = 1;
+          const isPending = b.status === 'pending';
 
-          if(usedCount >= maxChange){
+          if(!isPending && usedCount >= maxChange){
             modifyBtns = `<div style="margin-top:8px;background:#FEF2F2;border-radius:8px;padding:8px 12px;font-size:12px;color:#991B1B;font-weight:600;">이번 달 변경 횟수를 모두 사용했습니다 (월 1회 제한)</div>`;
           } else {
+            const limitNote = isPending
+              ? `승인 전 변경 무제한 가능`
+              : `이번 달 변경 ${usedCount}/${maxChange}회 사용`;
             modifyBtns = `
               <div style="display:flex;gap:8px;margin-top:10px;">
                 <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}','${regularMonth}')"
                   style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 변경</button>
               </div>
-              <div style="margin-top:6px;font-size:11px;color:var(--text3);">정기 신청은 변경만 가능 · 이번 달 변경 ${usedCount}/${maxChange}회 사용</div>`;
+              <div style="margin-top:6px;font-size:11px;color:var(--text3);">정기 신청 · ${limitNote}</div>`;
           }
         }
 
@@ -1230,22 +1259,39 @@ function openChangeFromMy(key, id, name, seatType, dateStr, pi, phone, regularMo
   document.getElementById('change-from-info').textContent =
     `현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'책상':'이젤'}`;
 
-  // 변경 횟수 안내
-  const usedCount = getUsedChangeCount(phone, regularMonth);
-  const [y,m] = regularMonth.split('-');
+  const todayStr = dateKey(new Date());
+  let limitNote = '';
+  let minDate = todayStr;
+  let maxDate = '';
+
+  if(regularMonth === 'single' || regularMonth === 'changed'){
+    // 자유신청 당일 변경 / 변경된 수업 당일 재변경: 오늘 하루만
+    limitNote = regularMonth === 'single'
+      ? '자유 신청 당일 변경 · 변경 후 재변경 불가'
+      : '변경된 수업 당일 재변경 · 이후 재변경 불가';
+    maxDate = todayStr;
+  } else {
+    // 정기신청: 수업 주 포함 다음 주 일요일까지
+    const dayOfWeek = d.getDay();
+    const thisSunday = new Date(d);
+    thisSunday.setDate(d.getDate() + (dayOfWeek===0 ? 7 : 7-dayOfWeek));
+    const nextSunday = new Date(thisSunday);
+    nextSunday.setDate(thisSunday.getDate()+7);
+    maxDate = dateKey(nextSunday);
+    const booking = allBookings[key] && allBookings[key][id];
+    const isPending = booking && booking.status === 'pending';
+    const usedCount = getUsedChangeCount(phone, regularMonth);
+    const mNum = parseInt(regularMonth.split('-')[1]);
+    limitNote = isPending
+      ? '승인 전 변경 무제한'
+      : `${mNum}월 변경 ${usedCount}/1회 사용`;
+  }
+
   document.getElementById('change-limit-info').innerHTML =
-    `<div class="notice-info notice-box">✏️ ${parseInt(m)}월 변경 횟수: ${usedCount}/1회 사용 · 변경된 수업은 재변경 불가입니다</div>`;
+    `<div class="notice-info notice-box">✏️ ${limitNote}</div>`;
 
-  // 변경 가능 기한: 수업 주 포함 다음 주 일요일까지
-  const dayOfWeek = d.getDay();
-  const thisSunday = new Date(d);
-  thisSunday.setDate(d.getDate() + (dayOfWeek===0 ? 7 : 7-dayOfWeek));
-  const nextSunday = new Date(thisSunday);
-  nextSunday.setDate(thisSunday.getDate()+7);
-
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-  document.getElementById('change-new-date').min = dateKey(tomorrow);
-  document.getElementById('change-new-date').max = dateKey(nextSunday);
+  document.getElementById('change-new-date').min = minDate;
+  document.getElementById('change-new-date').max = maxDate;
   document.getElementById('change-new-date').value = '';
   document.querySelectorAll('#change-period-btns .month-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('change-card-desk').className = 'seat-select-card disabled';
@@ -1311,22 +1357,29 @@ async function submitChange(){
     // 기존 신청 취소
     await db.ref(`bookings/${changeTarget.key}/${changeTarget.id}`).update({status:'cancelled'});
 
-    // 새 수업 신청 (자유신청으로 전환, 재변경 불가)
-    const oldBooking = allBookings[changeTarget.key]?.[changeTarget.id] || {};
+    // 새 수업 신청 (변경된 수업으로 등록, 재변경 당일만 가능)
     await db.ref(`bookings/${newKey}`).push({
       name: changeTarget.name,
       phone: changeTarget.phone,
       seatType: changeNewSeat,
       status: 'pending',
       time: new Date().toISOString(),
-      isRegular: false,  // 변경된 수업은 자유신청으로 전환
+      isRegular: false,
       regularId: null,
       regularMonth: null,
-      changedFrom: changeTarget.key,
+      changedFrom: changeTarget.key, // 변경 출처 표시
     });
 
-    // 변경 횟수 카운트 증가
-    await incrementChangeCount(changeTarget.phone, changeTarget.regularMonth);
+    // 변경 횟수 카운트: 정기신청 승인 후 변경만 차감
+    const rm = changeTarget.regularMonth;
+    const isCountable = rm && rm !== 'single' && rm !== 'changed';
+    if(isCountable){
+      const booking = allBookings[changeTarget.key]?.[changeTarget.id];
+      const isPending = booking && booking.status === 'pending';
+      if(!isPending){
+        await incrementChangeCount(changeTarget.phone, rm);
+      }
+    }
 
     // 이메일
     const newDate = new Date(dateVal + 'T00:00:00');
