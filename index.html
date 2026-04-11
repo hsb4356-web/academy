@@ -455,6 +455,55 @@
   </div>
 </div>
 
+<!-- 일괄 변경 모달 (승인 전 정기신청 전체 변경) -->
+<div class="modal-overlay" id="bulk-change-modal">
+  <div class="modal">
+    <span class="modal-handle"></span>
+    <button class="modal-close" onclick="closeModal('bulk-change-modal');document.getElementById('my-modal').classList.add('show');">✕</button>
+    <h3>🔄 정기신청 전체 변경</h3>
+    <div class="modal-subtitle" id="bulk-change-subtitle"></div>
+    <div class="notice-warning notice-box" id="bulk-change-info"></div>
+
+    <div class="form-group">
+      <label>새 요일 선택</label>
+      <div class="month-btns" id="bulk-dow-btns">
+        <button class="month-btn" onclick="selectBulkDow(1,this)">월</button>
+        <button class="month-btn" onclick="selectBulkDow(2,this)">화</button>
+        <button class="month-btn" onclick="selectBulkDow(3,this)">수</button>
+        <button class="month-btn" onclick="selectBulkDow(4,this)">목</button>
+        <button class="month-btn" onclick="selectBulkDow(5,this)">금</button>
+        <button class="month-btn" onclick="selectBulkDow(6,this)">토</button>
+        <button class="month-btn" onclick="selectBulkDow(0,this)">일</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>새 교시 선택</label>
+      <div class="month-btns" id="bulk-period-btns">
+        <button class="month-btn" onclick="selectBulkPeriod(0,this)">1교시 10:00~13:00</button>
+        <button class="month-btn" onclick="selectBulkPeriod(1,this)">2교시 14:00~17:00</button>
+        <button class="month-btn" onclick="selectBulkPeriod(2,this)">3교시 18:00~22:00</button>
+      </div>
+    </div>
+
+    <div class="seat-select">
+      <div class="seat-select-card" id="bulk-card-desk" onclick="selectBulkSeat('desk')">
+        <div class="seat-name">책상 자리</div>
+      </div>
+      <div class="seat-select-card" id="bulk-card-easel" onclick="selectBulkSeat('easel')">
+        <div class="seat-name">이젤 자리</div>
+      </div>
+    </div>
+
+    <div id="bulk-preview" style="margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.8;"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('bulk-change-modal');document.getElementById('my-modal').classList.add('show');">취소</button>
+      <button class="btn btn-regular" onclick="submitBulkChange()">전체 변경하기</button>
+    </div>
+  </div>
+</div>
+
 <div class="loading-overlay" id="loading"><div class="spinner"></div><div style="color:#fff;font-size:14px">처리 중...</div></div>
 <div class="toast" id="toast"></div>
 
@@ -1221,10 +1270,15 @@ function showDayBookings(dateStr){
             const limitNote = isPending
               ? `승인 전 변경 무제한 가능`
               : `이번 달 변경 ${usedCount}/${maxChange}회 사용`;
+            const bulkBtn = isPending
+              ? `<button onclick="openBulkChange('${b.phone}','${b.name}')"
+                  style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--regular);background:#fff;color:var(--regular);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">🔄 전체변경</button>`
+              : '';
             modifyBtns = `
               <div style="display:flex;gap:8px;margin-top:10px;">
                 <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}','${regularMonth}')"
                   style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 변경</button>
+                ${bulkBtn}
               </div>
               <div style="margin-top:6px;font-size:11px;color:var(--text3);">정기 신청 · ${limitNote}</div>`;
           }
@@ -1401,6 +1455,157 @@ async function submitChange(){
     showToast('변경 중 오류가 발생했습니다','error');
     console.error(e);
   }
+  showLoading(false);
+}
+
+
+// ── 일괄 변경 (승인 전 정기신청 전체) ──
+let bulkChangePhone = '';
+let bulkChangeName = '';
+let bulkNewDow = null;
+let bulkNewPeriod = null;
+let bulkNewSeat = null;
+
+function openBulkChange(phone, name){
+  closeModal('my-modal');
+  bulkChangePhone = phone;
+  bulkChangeName = name;
+  bulkNewDow = null; bulkNewPeriod = null; bulkNewSeat = null;
+
+  const pendingRegular = myBookingsData.filter(b => b.isRegular && b.status === 'pending');
+  const months = [...new Set(pendingRegular.map(b => b.regularMonth || b.dateStr.slice(0,7)))].length;
+  const totalCount = pendingRegular.length;
+
+  document.getElementById('bulk-change-subtitle').textContent = name + '님의 정기신청 전체를 변경합니다';
+  document.getElementById('bulk-change-info').innerHTML =
+    '⚠️ 승인 전 정기신청 <strong>' + totalCount + '개</strong> (' + months + '개월)를 모두 취소하고 새 일정으로 재신청합니다';
+
+  document.querySelectorAll('#bulk-dow-btns .month-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('#bulk-period-btns .month-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('bulk-card-desk').className = 'seat-select-card';
+  document.getElementById('bulk-card-easel').className = 'seat-select-card';
+  document.getElementById('bulk-preview').innerHTML = '';
+  document.getElementById('bulk-change-modal').classList.add('show');
+}
+
+function selectBulkDow(dow, btn){
+  bulkNewDow = dow;
+  document.querySelectorAll('#bulk-dow-btns .month-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  updateBulkPreview();
+}
+
+function selectBulkPeriod(pi, btn){
+  bulkNewPeriod = pi;
+  document.querySelectorAll('#bulk-period-btns .month-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  updateBulkPreview();
+}
+
+function selectBulkSeat(type){
+  bulkNewSeat = type;
+  document.getElementById('bulk-card-desk').className = 'seat-select-card' + (type==='desk'?' selected-desk':'');
+  document.getElementById('bulk-card-easel').className = 'seat-select-card' + (type==='easel'?' selected-easel':'');
+  updateBulkPreview();
+}
+
+function updateBulkPreview(){
+  if(bulkNewDow === null || bulkNewPeriod === null || !bulkNewSeat) return;
+  const pendingRegular = myBookingsData.filter(b => b.isRegular && b.status === 'pending');
+  const totalMonths = [...new Set(pendingRegular.map(b => b.regularMonth || b.dateStr.slice(0,7)))].length;
+  const today = new Date();
+  const startDate = new Date(today);
+  const todayDow = today.getDay();
+  let diff = bulkNewDow - todayDow;
+  if(diff <= 0) diff += 7;
+  startDate.setDate(today.getDate() + diff);
+  const newMonthGroups = calcRegularDatesByMonth(startDate, totalMonths, bulkNewPeriod);
+  const totalCount = newMonthGroups.reduce((s, mg) => s + mg.dates.length, 0);
+  let html = '<div style="padding:10px 12px;background:var(--regular-light);border-radius:10px;">' +
+    '<div style="font-weight:700;color:var(--regular);margin-bottom:8px;">변경 후 일정 (총 ' + totalCount + '회)</div>';
+  newMonthGroups.forEach(mg => {
+    if(mg.dates.length === 0) return;
+    const mNum = parseInt(mg.month.split('-')[1]);
+    html += '<div style="margin-bottom:4px;font-size:12px;"><span style="font-weight:700;color:var(--text);">' + mNum + '월 (' + mg.dates.length + '회)</span> ';
+    html += mg.dates.map(d => (d.getMonth()+1) + '/' + d.getDate() + '(' + DAYS[dayIdx(d)] + ')').join(', ');
+    html += '</div>';
+  });
+  html += '</div>';
+  document.getElementById('bulk-preview').innerHTML = html;
+}
+
+async function submitBulkChange(){
+  if(bulkNewDow === null){ showToast('요일을 선택해주세요','error'); return; }
+  if(bulkNewPeriod === null){ showToast('교시를 선택해주세요','error'); return; }
+  if(!bulkNewSeat){ showToast('자리를 선택해주세요','error'); return; }
+
+  const pendingRegular = myBookingsData.filter(b => b.isRegular && b.status === 'pending');
+  if(pendingRegular.length === 0){ showToast('변경할 승인 전 정기신청이 없습니다','error'); return; }
+
+  const totalMonths = [...new Set(pendingRegular.map(b => b.regularMonth || b.dateStr.slice(0,7)))].length;
+  const today = new Date();
+  const startDate = new Date(today);
+  let diff = bulkNewDow - today.getDay();
+  if(diff <= 0) diff += 7;
+  startDate.setDate(today.getDate() + diff);
+
+  const newMonthGroups = calcRegularDatesByMonth(startDate, totalMonths, bulkNewPeriod);
+  const totalNewCount = newMonthGroups.reduce((s, mg) => s + mg.dates.length, 0);
+
+  if(!confirm('기존 정기신청 ' + pendingRegular.length + '개를 취소하고
+새 일정 ' + totalNewCount + '개로 재신청할까요?')) return;
+
+  showLoading(true);
+  try {
+    const cancelUpdates = {};
+    pendingRegular.forEach(b => { cancelUpdates['bookings/' + b.key + '/' + b.id + '/status'] = 'cancelled'; });
+    await db.ref().update(cancelUpdates);
+
+    const now = new Date().toISOString();
+    const max = bulkNewSeat === 'desk' ? MAX_DESK : MAX_EASEL;
+    let successCount = 0;
+
+    for(const mg of newMonthGroups){
+      if(mg.dates.length === 0) continue;
+      const regularId = 'reg_' + mg.month + '_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+      for(const futureDate of mg.dates){
+        const fKey = cellKey(futureDate, bulkNewPeriod);
+        const fExisting = Object.values(allBookings[fKey] || {});
+        if(fExisting.find(b => b.phone === bulkChangePhone && b.status !== 'cancelled')) continue;
+        if(countByType(fKey, bulkNewSeat) >= max) continue;
+        await db.ref('bookings/' + fKey).push({
+          name: bulkChangeName, phone: bulkChangePhone, seatType: bulkNewSeat,
+          status: 'pending', time: now, isRegular: true, regularId, regularMonth: mg.month,
+        });
+        successCount++;
+      }
+    }
+
+    const p = PERIODS[bulkNewPeriod];
+    const dowLabel = ['일','월','화','수','목','금','토'][bulkNewDow];
+    const typeLabel = bulkNewSeat === 'desk' ? '책상' : '이젤';
+    await sendEmail(
+      '[정기 전체변경] ' + bulkChangeName + '님',
+      '정기신청이 전체 변경되었습니다.\n\n이름: ' + bulkChangeName + '\n전화번호: ' + bulkChangePhone +
+      '\n\n[변경 후]\n매주 ' + dowLabel + '요일 ' + p.label + ' (' + p.time + ')\n' + typeLabel +
+      '\n총 ' + successCount + '회\n\n관리자 페이지에서 승인해주세요.'
+    );
+
+    closeModal('bulk-change-modal');
+    showToast(bulkChangeName + '님 정기신청 전체 변경 완료! 총 ' + successCount + '회 ✅', 'success');
+
+    myBookingsData = [];
+    Object.entries(allBookings).forEach(([key, bMap]) => {
+      Object.entries(bMap).forEach(([id, b]) => {
+        if(b.phone === bulkChangePhone && b.status !== 'cancelled'){
+          const [dateStr, pi] = key.split('_');
+          myBookingsData.push({key, id, dateStr, pi:parseInt(pi), ...b});
+        }
+      });
+    });
+    myBookingsData.sort((a,b) => new Date(a.dateStr) - new Date(b.dateStr));
+
+  } catch(e){ showToast('변경 중 오류가 발생했습니다','error'); console.error(e); }
   showLoading(false);
 }
 
@@ -1725,9 +1930,10 @@ document.addEventListener('keydown', e => {
     closeModal('my-modal');
     closeModal('change-new-modal');
     closeModal('cell-detail-modal');
+    closeModal('bulk-change-modal');
   }
 });
-['booking-modal','my-modal','change-new-modal','cell-detail-modal'].forEach(id => {
+['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if(e.target.id===id) closeModal(id);
   });
