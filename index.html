@@ -1552,8 +1552,7 @@ async function submitBulkChange(){
   const newMonthGroups = calcRegularDatesByMonth(startDate, totalMonths, bulkNewPeriod);
   const totalNewCount = newMonthGroups.reduce((s, mg) => s + mg.dates.length, 0);
 
-  if(!confirm('기존 정기신청 ' + pendingRegular.length + '개를 취소하고
-새 일정 ' + totalNewCount + '개로 재신청할까요?')) return;
+  if(!confirm('기존 정기신청 ' + pendingRegular.length + '개를 취소하고 새 일정 ' + totalNewCount + '개로 재신청할까요?')) return;
 
   showLoading(true);
   try {
