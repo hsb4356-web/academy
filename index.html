@@ -1268,11 +1268,18 @@ function showDayBookings(dateStr){
               ? `<button onclick="openBulkChange('${b.phone}','${b.name}')"
                   style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--regular);background:#fff;color:var(--regular);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">🔄 전체변경</button>`
               : '';
+            const cancelBtn = isPending
+              ? `<button onclick="cancelPendingBooking('${b.key}','${b.id}','${b.name}','${b.phone}')"
+                  style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--danger);background:#fff;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✕ 취소</button>`
+              : '';
             modifyBtns = `
               <div style="display:flex;gap:8px;margin-top:10px;">
                 <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}','${regularMonth}')"
                   style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 변경</button>
                 ${bulkBtn}
+              </div>
+              <div style="display:flex;gap:8px;margin-top:6px;">
+                ${cancelBtn}
               </div>
               <div style="margin-top:6px;font-size:11px;color:var(--text3);">정기 신청 · ${limitNote}</div>`;
           }
@@ -1452,6 +1459,53 @@ async function submitChange(){
   showLoading(false);
 }
 
+
+
+// ── 승인 전 정기신청 취소 ──
+async function cancelPendingBooking(key, id, name, phone){
+  const allPending = myBookingsData.filter(b => b.isRegular && b.status === 'pending');
+  let cancelAll = false;
+
+  if(allPending.length > 1){
+    const choice = confirm(
+      name + '님 정기신청 취소\n\n' +
+      '[확인] 전체 정기신청 취소 (' + allPending.length + '개)\n' +
+      '[취소] 이 수업만 취소'
+    );
+    cancelAll = choice;
+  } else {
+    if(!confirm(name + '님 정기신청을 취소할까요?')) return;
+  }
+
+  showLoading(true);
+  try {
+    if(cancelAll){
+      const updates = {};
+      allPending.forEach(b => {
+        updates['bookings/' + b.key + '/' + b.id + '/status'] = 'cancelled';
+      });
+      await db.ref().update(updates);
+      showToast(name + '님 정기신청 전체 취소 완료', 'success');
+    } else {
+      await db.ref('bookings/' + key + '/' + id).update({status: 'cancelled'});
+      showToast(name + '님 수업 취소 완료', 'success');
+    }
+
+    // 내 수업 목록 갱신
+    myBookingsData = myBookingsData.filter(b => {
+      if(cancelAll) return !(b.isRegular && b.status === 'pending');
+      return !(b.key === key && b.id === id);
+    });
+    renderMyCalendar();
+
+    await sendEmail(
+      '수업 취소 - ' + name + '님',
+      '수업 신청이 취소되었습니다.\n\n이름: ' + name + '\n전화번호: ' + phone +
+      (cancelAll ? '\n\n정기신청 전체 취소 (' + allPending.length + '개)' : '\n\n단건 취소')
+    );
+  } catch(e){ showToast('취소 중 오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
+}
 
 // ── 일괄 변경 (승인 전 정기신청 전체) ──
 let bulkChangePhone = '';
