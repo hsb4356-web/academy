@@ -825,7 +825,7 @@ function selectMonths(n, btn){
   const pi = selectedCell.pi;
 
   if(n === 0){
-    // 이번달: 이번달 말까지 같은 요일, 공휴일+휴강 제외
+    // 이번달: 체크박스로 날짜 직접 선택
     const startDate = selectedCell.date;
     const endOfMonth = new Date(startDate.getFullYear(), startDate.getMonth()+1, 0);
     const thisDates = [];
@@ -837,18 +837,24 @@ function selectMonths(n, btn){
       }
       cur.setDate(cur.getDate()+7);
     }
-    // 변경 가능 횟수 안내
-    const changeLimit = Math.floor(thisDates.length / 4) || 1;
-    const dateList = thisDates.map((d,i) => {
+
+    // 체크박스 UI 생성 (기본: 4회까지 자동 체크)
+    const checkItems = thisDates.map((d, i) => {
+      const dk = dateKey(d);
+      const checked = i < 4 ? 'checked' : '';
       const dStr = `${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]})`;
-      return `<span style="display:inline-block;margin:2px 4px;padding:2px 8px;border-radius:6px;background:${i===0?'#EEF2FF':'#F3F4F6'};color:${i===0?'var(--accent)':'var(--text)'};">${dStr}</span>`;
+      return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;margin-bottom:6px;">
+        <input type="checkbox" value="${dk}" ${checked} onchange="updateThisMonthSelection()" style="width:18px;height:18px;accent-color:var(--regular);cursor:pointer;">
+        <span style="font-size:14px;font-weight:600;color:var(--text);">${dStr}</span>
+      </label>`;
     }).join('');
+
     preview.innerHTML = `
-      <div style="margin-bottom:6px;font-weight:700;color:var(--text);">이번달 총 ${thisDates.length}회</div>
-      <div style="line-height:2;">${dateList}</div>
-      <div style="margin-top:8px;padding:8px 12px;background:var(--regular-light);border-radius:8px;font-size:12px;color:var(--regular);font-weight:600;">
-        ✏️ 이 달 변경 가능 횟수: 1회
-      </div>`;
+      <div style="margin-bottom:10px;font-weight:700;color:var(--text);">수업 날짜를 선택해주세요</div>
+      <div id="this-month-checks">${checkItems}</div>
+      <div id="this-month-notice" style="margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;"></div>`;
+
+    updateThisMonthSelection();
     return;
   }
 
@@ -878,10 +884,51 @@ function selectMonths(n, btn){
   const totalCount = monthGroups.reduce((s, mg) => s + mg.dates.length, 0);
   preview.innerHTML = `
     <div style="margin-bottom:8px;font-weight:700;color:var(--text);">총 ${totalCount}회 (${n}개월, 월 1회 변경 가능)</div>
+    <div style="margin-bottom:10px;padding:8px 12px;background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:8px;font-size:12px;color:#166534;font-weight:600;">
+      📅 날짜는 공휴일·휴강을 제외하고 달력 기준으로 자동 계산됩니다
+    </div>
     ${dateHTML}
     <div style="margin-top:8px;padding:8px 12px;background:var(--regular-light);border-radius:8px;font-size:12px;color:var(--regular);font-weight:600;">
       ✏️ 변경은 월별로 각 1회씩 가능합니다. 변경된 수업은 재변경 불가합니다.
     </div>`;
+}
+
+
+// ── 이번달 체크박스 선택 업데이트 ──
+function updateThisMonthSelection(){
+  const checks = document.querySelectorAll('#this-month-checks input[type=checkbox]');
+  const selected = [...checks].filter(c => c.checked);
+  const count = selected.length;
+  const notice = document.getElementById('this-month-notice');
+  if(!notice) return;
+
+  if(count === 0){
+    notice.style.background = '#FEF2F2';
+    notice.style.border = '1.5px solid #FECACA';
+    notice.style.color = '#991B1B';
+    notice.textContent = '날짜를 최소 1개 이상 선택해주세요';
+  } else if(count < 4){
+    notice.style.background = '#FFFBEB';
+    notice.style.border = '1.5px solid #FDE68A';
+    notice.style.color = '#92400E';
+    notice.textContent = `${count}회 선택 — 4회 미만으로 수업료가 별도 계산됩니다`;
+  } else if(count === 4){
+    notice.style.background = 'var(--regular-light)';
+    notice.style.border = '1.5px solid #C4B5FD';
+    notice.style.color = 'var(--regular)';
+    notice.textContent = `${count}회 선택 — 정상 수업료 기준입니다 ✅`;
+  } else {
+    notice.style.background = '#FEF2F2';
+    notice.style.border = '1.5px solid #FECACA';
+    notice.style.color = '#991B1B';
+    notice.textContent = `${count}회 선택 — 5회차 수업은 추가 수업료가 발생합니다 ⚠️`;
+  }
+}
+
+// 이번달 체크박스에서 선택된 날짜 반환
+function getThisMonthSelectedDates(){
+  const checks = document.querySelectorAll('#this-month-checks input[type=checkbox]:checked');
+  return [...checks].map(c => new Date(c.value + 'T00:00:00'));
 }
 
 function selectSeatType(type){
@@ -965,20 +1012,14 @@ async function submitBooking(){
       let monthGroups = [];
 
       if(selectedMonths === 0){
-        // 이번달
-        const startDate = selectedCell.date;
-        const endOfMonth = new Date(startDate.getFullYear(), startDate.getMonth()+1, 0);
-        const thisDates = [];
-        const cur = new Date(startDate);
-        while(cur <= endOfMonth){
-          const dk = dateKey(cur);
-          if(!isHoliday(dk) && !isCellClosed(dk, pi)){
-            thisDates.push(new Date(cur));
-          }
-          cur.setDate(cur.getDate()+7);
+        // 이번달: 체크박스에서 선택된 날짜 사용
+        const selectedDates = getThisMonthSelectedDates();
+        if(selectedDates.length === 0){
+          showLoading(false); showToast('수업 날짜를 선택해주세요','error'); return;
         }
+        const startDate = selectedCell.date;
         const monthStr = `${startDate.getFullYear()}-${String(startDate.getMonth()+1).padStart(2,'0')}`;
-        monthGroups = [{month: monthStr, dates: thisDates}];
+        monthGroups = [{month: monthStr, dates: selectedDates}];
       } else {
         monthGroups = calcRegularDatesByMonth(selectedCell.date, selectedMonths, pi);
       }
