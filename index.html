@@ -339,11 +339,28 @@
       </div>
     </div>
 
-    <!-- 탭3: 출석부 (추후 구현) -->
+    <!-- 탭3: 출석부 -->
     <div id="admin-tab-attendance" style="display:none">
       <div class="admin-section">
         <h3>📋 출석부</h3>
-        <p style="font-size:14px;color:var(--text2);">출석부 기능은 곧 추가될 예정입니다.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="nav-btn" onclick="changeAttendanceMonth(-1)">&#8592;</button>
+            <h4 id="attendance-month-title" style="font-size:16px;font-weight:700;"></h4>
+            <button class="nav-btn" onclick="changeAttendanceMonth(1)">&#8594;</button>
+          </div>
+          <button onclick="exportAttendanceExcel()" style="padding:8px 16px;border-radius:10px;border:none;background:#10B981;color:#fff;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📥 엑셀 다운로드</button>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
+          셀을 클릭해서 출석(NT) / 결석(NTx) / 미체크(0)를 전환합니다
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;font-size:12px;">
+          <span style="background:#ECFDF5;color:#065F46;padding:3px 8px;border-radius:6px;font-weight:700;">NT = 출석</span>
+          <span style="background:#FEF2F2;color:#991B1B;padding:3px 8px;border-radius:6px;font-weight:700;">NTx = 결석</span>
+          <span style="background:#F3F4F6;color:#6B7280;padding:3px 8px;border-radius:6px;font-weight:700;">0 = 예정</span>
+          <span style="background:#fff;color:#D1D5DB;padding:3px 8px;border-radius:6px;font-weight:700;border:1px solid #E5E7EB;">- = 미신청</span>
+        </div>
+        <div id="attendance-table" style="overflow-x:auto;"></div>
       </div>
     </div>
   </div>
@@ -577,7 +594,7 @@ let studentMonthOffset = 0;
 let selectedCell = null, selectedSeatType = null;
 let bookingType = 'single', selectedMonths = null;
 let adminLoggedIn = false, currentFilter = 'all';
-let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {};
+let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {}, allAttendance = {};
 
 // ── Firebase 실시간 연동 ──
 db.ref('bookings').on('value', snap => {
@@ -596,6 +613,10 @@ db.ref('holidays').on('value', snap => {
 });
 db.ref('changeCounts').on('value', snap => {
   allChangeCounts = snap.val() || {};
+});
+db.ref('attendance').on('value', snap => {
+  allAttendance = snap.val() || {};
+  if(adminLoggedIn) renderAttendanceTable();
 });
 
 // Firebase Auth 상태 감지
@@ -1993,6 +2014,212 @@ async function submitBulkChange(){
 }
 
 
+
+// ── 출석부 ──
+let attendanceMonthYear = new Date().getFullYear();
+let attendanceMonthMonth = new Date().getMonth();
+
+function changeAttendanceMonth(dir){
+  attendanceMonthMonth += dir;
+  if(attendanceMonthMonth > 11){ attendanceMonthMonth=0; attendanceMonthYear++; }
+  if(attendanceMonthMonth < 0){ attendanceMonthMonth=11; attendanceMonthYear--; }
+  renderAttendanceTable();
+}
+
+function renderAttendanceTable(){
+  const year = attendanceMonthYear;
+  const month = attendanceMonthMonth;
+  const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+  const today = new Date();
+  const todayStr = dateKey(today);
+
+  document.getElementById('attendance-month-title').textContent = `${year}년 ${month+1}월`;
+
+  // 이 달의 승인된 수업 목록 수집
+  // 구조: { 'phone_pi': { name, phone, pi, dates: [dateStr,...] } }
+  const studentMap = {};
+  Object.entries(allBookings).forEach(([key, bMap]) => {
+    const [dateStr, pi] = key.split('_');
+    if(!dateStr.startsWith(monthStr)) return;
+    Object.values(bMap).forEach(b => {
+      if(b.status === 'cancelled') return;
+      const sKey = `${b.phone}_${pi}`;
+      if(!studentMap[sKey]){
+        studentMap[sKey] = {name:b.name, phone:b.phone, pi:parseInt(pi), dates:[]};
+      }
+      studentMap[sKey].dates.push(dateStr);
+    });
+  });
+
+  // 날짜 정렬
+  const allDates = [...new Set(
+    Object.values(studentMap).flatMap(s => s.dates)
+  )].sort();
+
+  if(allDates.length === 0){
+    document.getElementById('attendance-table').innerHTML =
+      '<div class="empty-state">이번 달 승인된 수업이 없습니다</div>';
+    return;
+  }
+
+  // 학생 정렬: 이름순, 같은 이름이면 교시순
+  const students = Object.entries(studentMap)
+    .map(([sKey, s]) => ({sKey, ...s}))
+    .sort((a,b) => a.name.localeCompare(b.name,'ko') || a.pi - b.pi);
+
+  // 출석 카운트 계산: 학생별 이번달 날짜 순서대로 몇 번째인지
+  // attendance node: attendance/{monthStr}/{phone}_{pi}/{dateStr} = 'present'|'absent'
+
+  const thStyle = 'padding:7px 8px;text-align:center;font-weight:700;font-size:11px;background:#F0F2F8;border:1px solid #E2E5EF;white-space:nowrap;position:sticky;top:0;';
+  const tdStyle = 'padding:6px 4px;border:1px solid #E2E5EF;text-align:center;font-size:12px;min-width:52px;';
+  const nameTdStyle = 'padding:6px 8px;border:1px solid #E2E5EF;font-size:13px;font-weight:700;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;';
+  const periodColors = ['#065F46','#9A3412','#5B21B6'];
+
+  let html = `<table style="border-collapse:collapse;min-width:600px;width:100%;">
+    <thead><tr>
+      <th style="${thStyle}min-width:80px;position:sticky;left:0;z-index:2;">이름</th>
+      <th style="${thStyle}min-width:50px;">교시</th>
+      ${allDates.map(d => {
+        const dateObj = new Date(d + 'T00:00:00');
+        const dow = DAYS[dayIdx(dateObj)];
+        const day = dateObj.getDate();
+        const isPast = d <= todayStr;
+        return `<th style="${thStyle}${isPast?'':'color:#9CA3AF;'}">${day}<br>${dow}</th>`;
+      }).join('')}
+      <th style="${thStyle}">출석</th>
+      <th style="${thStyle}">결석</th>
+    </tr></thead>
+    <tbody>`;
+
+  students.forEach(s => {
+    const color = periodColors[s.pi] || '#374151';
+    const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
+
+    // 이번달 수업 날짜 정렬
+    const sortedDates = [...s.dates].sort();
+
+    let presentCount = 0, absentCount = 0;
+
+    const cells = allDates.map(d => {
+      if(!s.dates.includes(d)){
+        return `<td style="${tdStyle}background:#FAFAFA;color:#D1D5DB;">-</td>`;
+      }
+      const sessionNum = sortedDates.indexOf(d) + 1;
+      const status = attendNode[d];
+      const isPast = d < todayStr;
+      const isToday2 = d === todayStr;
+
+      if(status === 'present'){
+        presentCount++;
+        return `<td style="${tdStyle}background:#ECFDF5;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}','present')">
+          <span style="color:#065F46;font-weight:700;">${sessionNum}T</span></td>`;
+      } else if(status === 'absent'){
+        absentCount++;
+        return `<td style="${tdStyle}background:#FEF2F2;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}','absent')">
+          <span style="color:#991B1B;font-weight:700;">${sessionNum}Tx</span></td>`;
+      } else if(isPast || isToday2){
+        // 지난 날짜 or 오늘: 체크 가능
+        return `<td style="${tdStyle}background:#FFFBEB;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}',null)">
+          <span style="color:#D97706;font-weight:600;">?</span></td>`;
+      } else {
+        // 미래: 예정
+        return `<td style="${tdStyle}background:#F9FAFB;">
+          <span style="color:#9CA3AF;font-weight:600;">0</span></td>`;
+      }
+    });
+
+    html += `<tr>
+      <td style="${nameTdStyle}">${s.name}</td>
+      <td style="padding:6px 4px;border:1px solid #E2E5EF;text-align:center;font-size:11px;font-weight:700;color:${color};white-space:nowrap;">${PERIODS[s.pi].label}</td>
+      ${cells.join('')}
+      <td style="${tdStyle}background:#ECFDF5;font-weight:700;color:#065F46;">${presentCount}</td>
+      <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;">${absentCount}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('attendance-table').innerHTML = html;
+}
+
+async function toggleAttendance(monthStr, studentKey, dateStr, currentStatus){
+  // 순환: null(?) → present(출석) → absent(결석) → null
+  let newStatus;
+  if(currentStatus === null) newStatus = 'present';
+  else if(currentStatus === 'present') newStatus = 'absent';
+  else newStatus = null;
+
+  showLoading(true);
+  try {
+    if(newStatus === null){
+      await db.ref(`attendance/${monthStr}/${studentKey}/${dateStr}`).remove();
+    } else {
+      await db.ref(`attendance/${monthStr}/${studentKey}/${dateStr}`).set(newStatus);
+    }
+  } catch(e){ showToast('오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
+}
+
+// ── 출석부 엑셀 다운로드 ──
+function exportAttendanceExcel(){
+  const year = attendanceMonthYear;
+  const month = attendanceMonthMonth;
+  const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+
+  const studentMap = {};
+  Object.entries(allBookings).forEach(([key, bMap]) => {
+    const [dateStr, pi] = key.split('_');
+    if(!dateStr.startsWith(monthStr)) return;
+    Object.values(bMap).forEach(b => {
+      if(b.status === 'cancelled') return;
+      const sKey = `${b.phone}_${pi}`;
+      if(!studentMap[sKey]) studentMap[sKey] = {name:b.name, phone:b.phone, pi:parseInt(pi), dates:[]};
+      studentMap[sKey].dates.push(dateStr);
+    });
+  });
+
+  const allDates = [...new Set(Object.values(studentMap).flatMap(s => s.dates))].sort();
+  const students = Object.entries(studentMap)
+    .map(([sKey, s]) => ({sKey, ...s}))
+    .sort((a,b) => a.name.localeCompare(b.name,'ko') || a.pi - b.pi);
+
+  // CSV 생성
+  const headers = ['이름','교시', ...allDates.map(d => {
+    const dateObj = new Date(d + 'T00:00:00');
+    return `${dateObj.getMonth()+1}/${dateObj.getDate()}(${DAYS[dayIdx(dateObj)]})`;
+  }), '출석', '결석'];
+
+  const rows = students.map(s => {
+    const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
+    const sortedDates = [...s.dates].sort();
+    let presentCount = 0, absentCount = 0;
+    const cells = allDates.map(d => {
+      if(!s.dates.includes(d)) return '-';
+      const sessionNum = sortedDates.indexOf(d) + 1;
+      const status = attendNode[d];
+      if(status === 'present'){ presentCount++; return `${sessionNum}T`; }
+      if(status === 'absent'){ absentCount++; return `${sessionNum}Tx`; }
+      const isPast = d < dateKey(new Date());
+      return isPast ? '?' : '0';
+    });
+    return [s.name, PERIODS[s.pi].label, ...cells, presentCount, absentCount];
+  });
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(','))
+    .join('
+');
+
+  const BOM = '﻿';
+  const blob = new Blob([BOM + csvContent], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `출석부_${year}년_${month+1}월.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('출석부 다운로드 완료 📥','success');
+}
+
 // ── 관리자 탭 전환 ──
 function showAdminTab(tab){
   ['roster','approval','attendance'].forEach(t => {
@@ -2003,6 +2230,7 @@ function showAdminTab(tab){
   });
   if(tab==='roster') renderAdmin();
   if(tab==='approval') renderBookingsList();
+  if(tab==='attendance') renderAttendanceTable();
 }
 
 // ── 관리자 로그인 (Firebase Auth) ──
