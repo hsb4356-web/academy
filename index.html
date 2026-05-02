@@ -1647,11 +1647,19 @@ function showDayBookings(dateStr){
           }
         }
 
+        // 출결 현황
+        const attMonth2 = b.dateStr.slice(0,7);
+        const attStatus2 = ((allAttendance[attMonth2]||{})[`${b.phone}_${b.pi}`]||{})[b.dateStr];
+        let attBadge = '';
+        if(attStatus2==='present') attBadge = `<span style="background:#ECFDF5;color:#065F46;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">✅ 출석</span>`;
+        else if(attStatus2==='absent') attBadge = `<span style="background:#FEF2F2;color:#991B1B;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">❌ 결석</span>`;
+        else if(b.dateStr <= dateKey(new Date())) attBadge = `<span style="background:#FFFBEB;color:#D97706;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">? 미체크</span>`;
+
         return `
           <div style="padding:10px 0;border-bottom:1px solid var(--border);">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
               <span style="font-weight:700;font-size:14px;">${p.label} ${p.time}</span>
-              ${statusBadge} ${regularBadge}
+              ${statusBadge} ${regularBadge} ${attBadge}
             </div>
             <div style="font-size:13px;color:var(--text2);">${typeLabel} 자리</div>
             ${modifyBtns}
@@ -2107,9 +2115,19 @@ function renderAttendanceTable(){
     </tr></thead>
     <tbody>`;
 
+  // 같은 전화번호 몇 개 교시인지 파악 (이름 병합용)
+  const phoneRowCount = {};
+  students.forEach(s => {
+    phoneRowCount[s.phone] = (phoneRowCount[s.phone] || 0) + 1;
+  });
+  const phoneFirstRow = {}; // 첫 번째 행인지 추적
+
   students.forEach(s => {
     const color = periodColors[s.pi] || '#374151';
     const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
+    const isFirstRow = !phoneFirstRow[s.phone];
+    if(isFirstRow) phoneFirstRow[s.phone] = true;
+    const rowSpan = phoneRowCount[s.phone];
 
     let presentCount = 0, absentCount = 0;
 
@@ -2131,19 +2149,22 @@ function renderAttendanceTable(){
         return `<td style="${tdStyle}background:#FEF2F2;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}','absent')">
           <span style="color:#991B1B;font-weight:700;">${sessionNum}Tx</span></td>`;
       } else if(isPast || isToday2){
-        // 지난 날짜 or 오늘: 체크 가능
         return `<td style="${tdStyle}background:#FFFBEB;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}',null)">
           <span style="color:#D97706;font-weight:600;">?</span></td>`;
       } else {
-        // 미래: 예정
         return `<td style="${tdStyle}background:#F9FAFB;">
           <span style="color:#9CA3AF;font-weight:600;">0</span></td>`;
       }
     });
 
-    html += `<tr>
-      <td style="${nameTdStyle}">${s.name}</td>
-      <td style="padding:6px 4px;border:1px solid #E2E5EF;text-align:center;font-size:11px;font-weight:700;color:${color};white-space:nowrap;">${PERIODS[s.pi].label}</td>
+    // 이름 셀: 첫 번째 행만 rowspan으로 병합
+    const nameCell = isFirstRow
+      ? `<td rowspan="${rowSpan}" style="${nameTdStyle}border-bottom:2px solid #C7D2FE;vertical-align:middle;text-align:center;background:#F8F7FF;">${s.name}</td>`
+      : '';
+
+    html += `<tr style="${isFirstRow && rowSpan>1 ? '' : ''}border-top:${isFirstRow && rowSpan>1?'2px solid #C7D2FE':'1px solid #E2E5EF'}">
+      ${nameCell}
+      <td style="padding:6px 4px;border:1px solid #E2E5EF;text-align:center;font-size:11px;font-weight:700;color:${color};white-space:nowrap;background:${color}18;">${PERIODS[s.pi].label}</td>
       ${cells.join('')}
       <td style="${tdStyle}background:#ECFDF5;font-weight:700;color:#065F46;">${presentCount}</td>
       <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;">${absentCount}</td>
@@ -2347,11 +2368,20 @@ function renderMonthRoster(){
         const easelList = list.filter(b=>b.seatType==='easel');
         const totalLeft = (MAX_DESK-deskList.length)+(MAX_EASEL-easelList.length);
         const bg = totalLeft===0?'#FEF2F2':totalLeft<=2?'#FFFBEB':'#F5F3FF';
+        const attMonth = dateStr.slice(0,7);
         let content = '';
-        if(easelList.length>0) content += easelList.map(b=>`<div style="font-weight:700;font-size:12px;padding:1px 0;${b.status==='approved'?'color:#1D4ED8;':'color:#92400E;'}">${b.name}</div>`).join('');
+        if(easelList.length>0) content += easelList.map(b=>{
+          const attStatus = ((allAttendance[attMonth]||{})[`${b.phone}_${pi}`]||{})[dateStr];
+          const dot = attStatus==='present'?'<span style="color:#10B981;font-size:9px;margin-right:2px;">●</span>':attStatus==='absent'?'<span style="color:#EF4444;font-size:9px;margin-right:2px;">●</span>':'';
+          return `<div style="font-weight:700;font-size:12px;padding:1px 0;${b.status==='approved'?'color:#1D4ED8;':'color:#92400E;'}">${dot}${b.name}</div>`;
+        }).join('');
         if(deskList.length>0){
           if(easelList.length>0) content += `<div style="border-top:1px dashed #E2E5EF;margin:2px 0;"></div>`;
-          content += deskList.map(b=>`<div style="font-weight:700;font-size:12px;padding:1px 0;${b.status==='approved'?'color:#065F46;':'color:#92400E;'}">${b.name}</div>`).join('');
+          content += deskList.map(b=>{
+            const attStatus = ((allAttendance[attMonth]||{})[`${b.phone}_${pi}`]||{})[dateStr];
+            const dot = attStatus==='present'?'<span style="color:#10B981;font-size:9px;margin-right:2px;">●</span>':attStatus==='absent'?'<span style="color:#EF4444;font-size:9px;margin-right:2px;">●</span>':'';
+            return `<div style="font-weight:700;font-size:12px;padding:1px 0;${b.status==='approved'?'color:#065F46;':'color:#92400E;'}">${dot}${b.name}</div>`;
+          }).join('');
         }
         html+=`<td style="${tdS}background:${bg};cursor:pointer;" onclick="openCellDetail(new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()}),${pi},'${key}')">${content}</td>`;
       });
@@ -2363,6 +2393,10 @@ function renderMonthRoster(){
       <span style="color:#1D4ED8;font-weight:600;">■ 이젤 승인</span>
       <span style="color:#065F46;font-weight:600;">■ 책상 승인</span>
       <span style="color:#92400E;font-weight:600;">■ 대기중</span>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;font-size:11px;">
+      <span style="color:#10B981;font-weight:600;">● 출석</span>
+      <span style="color:#EF4444;font-weight:600;">● 결석</span>
     </div>`;
   document.getElementById('roster-month-content').innerHTML = html;
 }
