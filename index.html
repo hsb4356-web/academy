@@ -2067,6 +2067,22 @@ function renderAttendanceTable(){
     .map(([sKey, s]) => ({sKey, ...s}))
     .sort((a,b) => a.name.localeCompare(b.name,'ko') || a.pi - b.pi);
 
+  // 전체 카운트 맵 생성: 같은 전화번호의 모든 수업을 날짜+교시 순으로 정렬 후 번호 부여
+  // globalSessionMap[phone][dateStr_pi] = 전체 순서 번호
+  const globalSessionMap = {};
+  const phoneGroups = {};
+  students.forEach(s => {
+    if(!phoneGroups[s.phone]) phoneGroups[s.phone] = [];
+    s.dates.forEach(d => phoneGroups[s.phone].push({dateStr:d, pi:s.pi}));
+  });
+  Object.entries(phoneGroups).forEach(([phone, sessions]) => {
+    sessions.sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.pi - b.pi);
+    globalSessionMap[phone] = {};
+    sessions.forEach((sess, idx) => {
+      globalSessionMap[phone][`${sess.dateStr}_${sess.pi}`] = idx + 1;
+    });
+  });
+
   // 출석 카운트 계산: 학생별 이번달 날짜 순서대로 몇 번째인지
   // attendance node: attendance/{monthStr}/{phone}_{pi}/{dateStr} = 'present'|'absent'
 
@@ -2095,16 +2111,13 @@ function renderAttendanceTable(){
     const color = periodColors[s.pi] || '#374151';
     const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
 
-    // 이번달 수업 날짜 정렬
-    const sortedDates = [...s.dates].sort();
-
     let presentCount = 0, absentCount = 0;
 
     const cells = allDates.map(d => {
       if(!s.dates.includes(d)){
         return `<td style="${tdStyle}background:#FAFAFA;color:#D1D5DB;">-</td>`;
       }
-      const sessionNum = sortedDates.indexOf(d) + 1;
+      const sessionNum = (globalSessionMap[s.phone] || {})[`${d}_${s.pi}`] || 0;
       const status = attendNode[d];
       const isPast = d < todayStr;
       const isToday2 = d === todayStr;
@@ -2182,6 +2195,21 @@ function exportAttendanceExcel(){
     .map(([sKey, s]) => ({sKey, ...s}))
     .sort((a,b) => a.name.localeCompare(b.name,'ko') || a.pi - b.pi);
 
+  // 전체 카운트 맵 (엑셀용)
+  const excelPhoneGroups = {};
+  students.forEach(s => {
+    if(!excelPhoneGroups[s.phone]) excelPhoneGroups[s.phone] = [];
+    s.dates.forEach(d => excelPhoneGroups[s.phone].push({dateStr:d, pi:s.pi}));
+  });
+  const excelSessionMap = {};
+  Object.entries(excelPhoneGroups).forEach(([phone, sessions]) => {
+    sessions.sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.pi - b.pi);
+    excelSessionMap[phone] = {};
+    sessions.forEach((sess, idx) => {
+      excelSessionMap[phone][`${sess.dateStr}_${sess.pi}`] = idx + 1;
+    });
+  });
+
   // CSV 생성
   const headers = ['이름','교시', ...allDates.map(d => {
     const dateObj = new Date(d + 'T00:00:00');
@@ -2190,11 +2218,10 @@ function exportAttendanceExcel(){
 
   const rows = students.map(s => {
     const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
-    const sortedDates = [...s.dates].sort();
     let presentCount = 0, absentCount = 0;
     const cells = allDates.map(d => {
       if(!s.dates.includes(d)) return '-';
-      const sessionNum = sortedDates.indexOf(d) + 1;
+      const sessionNum = (excelSessionMap[s.phone] || {})[`${d}_${s.pi}`] || 0;
       const status = attendNode[d];
       if(status === 'present'){ presentCount++; return `${sessionNum}T`; }
       if(status === 'absent'){ absentCount++; return `${sessionNum}Tx`; }
