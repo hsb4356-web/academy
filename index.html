@@ -188,6 +188,29 @@
   .cal-booking-detail{background:var(--surface2);border-radius:12px;padding:14px;margin-top:12px;border:1.5px solid var(--border);}
   .cal-booking-detail h5{font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px;}
 
+  /* 월별 학생 달력 */
+  .student-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:24px;}
+  .student-cal-day-label{text-align:center;font-size:12px;font-weight:700;color:var(--text2);padding:6px 0;}
+  .student-cal-day-label:first-child{color:#EF4444;}
+  .student-cal-day-label:last-child{color:#2563EB;}
+  .student-cal-cell{border-radius:10px;border:1.5px solid var(--border);background:#fff;min-height:72px;padding:4px;cursor:pointer;transition:all 0.15s;position:relative;overflow:hidden;}
+  .student-cal-cell:active{transform:scale(0.97);}
+  .student-cal-cell.closed-day{background:#F9FAFB;opacity:0.6;cursor:not-allowed;}
+  .student-cal-cell.past-day{opacity:0.5;cursor:not-allowed;}
+  .student-cal-cell.today-day{border-color:var(--accent);border-width:2px;}
+  .student-cal-cell.empty-day{background:transparent;border:none;cursor:default;}
+  .student-cal-cell.holiday-day{background:#FFF5F5;}
+  .student-date-num{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;}
+  .student-cal-cell.today-day .student-date-num{color:var(--accent);}
+  .student-cal-cell.past-day .student-date-num{color:var(--text3);}
+  .student-period-row{display:flex;flex-direction:column;gap:2px;margin-top:2px;}
+  .student-period-badge{border-radius:4px;padding:2px 3px;font-size:9px;font-weight:700;text-align:center;line-height:1.3;}
+  .student-period-badge.easel{background:var(--easel-light);color:var(--easel-color);}
+  .student-period-badge.desk{background:var(--desk-light);color:var(--desk-color);}
+  .student-period-badge.full{opacity:0.4;}
+  .student-period-badge.closed-period{background:#F3F4F6;color:var(--text3);}
+  .holiday-label{font-size:9px;color:#EF4444;font-weight:600;margin-bottom:2px;}
+
   @media(max-width:480px){
     .schedule-grid,.toggle-closed-grid{grid-template-columns:48px repeat(7,1fr);gap:2px;}
     .seat-count{font-size:13px;}
@@ -215,9 +238,9 @@
 <!-- 학생 화면 -->
 <main id="student-view">
   <div class="week-nav">
-    <button class="nav-btn" onclick="changeWeek(-1)">&#8592;</button>
-    <h2 id="week-title"></h2>
-    <button class="nav-btn" onclick="changeWeek(1)">&#8594;</button>
+    <button class="nav-btn" onclick="changeStudentMonth(-1)">&#8592;</button>
+    <h2 id="student-month-title"></h2>
+    <button class="nav-btn" onclick="changeStudentMonth(1)">&#8594;</button>
   </div>
   <div class="legend">
     <div class="legend-item"><div class="legend-dot" style="background:var(--easel-color)"></div> 이젤 (최대 5명)</div>
@@ -226,7 +249,7 @@
     <div class="legend-item" style="font-size:11px;color:var(--text2)">숫자 = 남은 자리</div>
     <button onclick="openMyBookings()" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📋 내 수업</button>
   </div>
-  <div class="schedule-grid" id="schedule-grid"></div>
+  <div id="student-month-grid"></div>
 </main>
 
 <!-- 관리자 화면 -->
@@ -531,6 +554,7 @@ const PERIODS = [
 
 // ── 상태 ──
 let currentWeekOffset = 0;
+let studentMonthOffset = 0;
 let selectedCell = null, selectedSeatType = null;
 let bookingType = 'single', selectedMonths = null;
 let adminLoggedIn = false, currentFilter = 'all';
@@ -539,12 +563,12 @@ let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {};
 // ── Firebase 실시간 연동 ──
 db.ref('bookings').on('value', snap => {
   allBookings = snap.val() || {};
-  renderSchedule();
+  renderStudentCalendar();
   if(adminLoggedIn){ renderMonthRoster(); renderBookingsList(); }
 });
 db.ref('closed').on('value', snap => {
   allClosed = snap.val() || {};
-  renderSchedule();
+  renderStudentCalendar();
   if(adminLoggedIn){ renderToggleGrid(getWeekDates(currentWeekOffset)); renderMonthRoster(); }
 });
 db.ref('holidays').on('value', snap => {
@@ -691,7 +715,7 @@ function showTab(tab){
   );
   document.getElementById('student-view').style.display = tab === 'student' ? 'block' : 'none';
   document.getElementById('admin-view').style.display = tab === 'admin' ? 'block' : 'none';
-  if(tab === 'student') renderSchedule();
+  if(tab === 'student') renderStudentCalendar();
   if(tab === 'admin' && adminLoggedIn) renderAdmin();
 }
 
@@ -771,6 +795,144 @@ function el(tag, cls, text){
   e.className = cls;
   e.textContent = text;
   return e;
+}
+
+
+// ── 학생 월별 달력 ──
+function changeStudentMonth(dir){
+  studentMonthOffset += dir;
+  renderStudentCalendar();
+}
+
+function renderStudentCalendar(){
+  const today = new Date();
+  const year = today.getFullYear() + Math.floor((today.getMonth() + studentMonthOffset) / 12);
+  const month = ((today.getMonth() + studentMonthOffset) % 12 + 12) % 12;
+  const todayStr = dateKey(today);
+
+  const titleEl = document.getElementById('student-month-title');
+  if(titleEl) titleEl.textContent = `${year}년 ${month+1}월`;
+
+  const grid = document.getElementById('student-month-grid');
+  if(!grid) return;
+
+  const firstDay = new Date(year, month, 1).getDay(); // 0=일
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+
+  let html = '<div class="student-cal-grid">';
+  // 요일 헤더
+  ['일','월','화','수','목','금','토'].forEach(d => {
+    html += `<div class="student-cal-day-label">${d}</div>`;
+  });
+
+  // 빈 칸
+  for(let i=0; i<firstDay; i++){
+    html += '<div class="student-cal-cell empty-day"></div>';
+  }
+
+  for(let d=1; d<=daysInMonth; d++){
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dateObj = new Date(year, month, d);
+    const isPast = dateStr < todayStr;
+    const isToday2 = dateStr === todayStr;
+    const holiday = Object.values(allHolidays).find(h => h.date === dateStr);
+
+    // 교시별 자리 현황
+    let periodsHtml = '<div class="student-period-row">';
+    let allClosed2 = true;
+    PERIODS.forEach((p, pi) => {
+      const key = `${dateStr}_${pi}`;
+      const isClosed2 = !!allClosed[key];
+      const easelLeft = MAX_EASEL - countByType(key, 'easel');
+      const deskLeft = MAX_DESK - countByType(key, 'desk');
+
+      if(!isClosed2) allClosed2 = false;
+
+      if(isClosed2){
+        periodsHtml += `<div class="student-period-badge closed-period">${p.label} 휴강</div>`;
+      } else if(isPast){
+        periodsHtml += `<div class="student-period-badge" style="background:#F3F4F6;color:var(--text3);">${p.label}</div>`;
+      } else {
+        periodsHtml += `<div class="student-period-badge easel${easelLeft<=0?' full':''}">이젤 ${easelLeft<=0?'✕':easelLeft}</div>`;
+        periodsHtml += `<div class="student-period-badge desk${deskLeft<=0?' full':''}">책상 ${deskLeft<=0?'✕':deskLeft}</div>`;
+      }
+    });
+    periodsHtml += '</div>';
+
+    let cls = 'student-cal-cell';
+    if(allClosed2 || holiday) cls += ' closed-day';
+    if(isPast) cls += ' past-day';
+    if(isToday2) cls += ' today-day';
+    if(holiday) cls += ' holiday-day';
+
+    const clickable = !isPast && !allClosed2 && !holiday;
+    const onclick = clickable ? `onclick="openDayPeriodSelect('${dateStr}')"` : '';
+
+    html += `<div class="${cls}" ${onclick}>
+      <div class="student-date-num">${d}${holiday?` <span class="holiday-label">${holiday.name}</span>`:''}</div>
+      ${periodsHtml}
+    </div>`;
+  }
+
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+// 날짜 클릭 → 교시 선택 팝업
+function openDayPeriodSelect(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  // 가능한 교시 찾기
+  const available = PERIODS.map((p, pi) => {
+    const key = `${dateStr}_${pi}`;
+    const closed = !!allClosed[key];
+    const easelLeft = MAX_EASEL - countByType(key, 'easel');
+    const deskLeft = MAX_DESK - countByType(key, 'desk');
+    return {pi, p, key, closed, easelLeft, deskLeft, anyLeft: easelLeft>0 || deskLeft>0};
+  }).filter(x => !x.closed && x.anyLeft);
+
+  if(available.length === 0){
+    showToast('신청 가능한 수업이 없습니다','error');
+    return;
+  }
+
+  if(available.length === 1){
+    // 교시가 1개뿐이면 바로 신청 모달로
+    const {pi, key, easelLeft, deskLeft} = available[0];
+    openModal(d, pi, key, deskLeft, easelLeft);
+    return;
+  }
+
+  // 교시 선택 팝업
+  const existing = document.getElementById('period-select-popup');
+  if(existing) existing.remove();
+
+  let btnHtml = available.map(({pi, p, easelLeft, deskLeft, key}) => `
+    <button onclick="selectPeriodAndOpen('${dateStr}',${pi},'${key}',${deskLeft},${easelLeft})"
+      style="width:100%;padding:14px 16px;border-radius:12px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:600;text-align:left;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+      <span>${p.label} ${p.time}</span>
+      <span style="font-size:12px;color:var(--text2);">이젤 ${easelLeft} · 책상 ${deskLeft}</span>
+    </button>`).join('');
+
+  const popup = document.createElement('div');
+  popup.id = 'period-select-popup';
+  popup.className = 'modal-overlay show';
+  popup.innerHTML = `
+    <div class="modal">
+      <span class="modal-handle"></span>
+      <button class="modal-close" onclick="document.getElementById('period-select-popup').remove()">✕</button>
+      <h3>${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) 교시 선택</h3>
+      <div class="modal-subtitle">신청할 수업 시간을 선택해주세요</div>
+      <div style="margin-top:8px;">${btnHtml}</div>
+    </div>`;
+  popup.addEventListener('click', e => { if(e.target === popup) popup.remove(); });
+  document.body.appendChild(popup);
+}
+
+function selectPeriodAndOpen(dateStr, pi, key, deskLeft, easelLeft){
+  const existing = document.getElementById('period-select-popup');
+  if(existing) existing.remove();
+  const d = new Date(dateStr + 'T00:00:00');
+  openModal(d, pi, key, deskLeft, easelLeft);
 }
 
 // ── 신청 모달 ──
@@ -2005,7 +2167,7 @@ function showToast(msg, type='success'){
 }
 
 // ── 초기화 ──
-renderSchedule();
+renderStudentCalendar();
 
 document.addEventListener('keydown', e => {
   if(e.key==='Escape'){
