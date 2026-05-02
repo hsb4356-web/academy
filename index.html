@@ -2206,8 +2206,7 @@ function exportAttendanceExcel(){
 
   const csvContent = [headers, ...rows]
     .map(row => row.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(','))
-    .join('
-');
+    .join('\n');
 
   const BOM = '﻿';
   const blob = new Blob([BOM + csvContent], {type:'text/csv;charset=utf-8;'});
