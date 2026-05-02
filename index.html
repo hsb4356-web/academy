@@ -2106,7 +2106,8 @@ function renderAttendanceTable(){
 
   let html = `<table style="border-collapse:collapse;min-width:600px;width:100%;">
     <thead><tr>
-      <th style="${thStyle}min-width:80px;position:sticky;left:0;z-index:2;">이름</th>
+      <th style="${thStyle}min-width:36px;position:sticky;left:0;z-index:2;">#</th>
+      <th style="${thStyle}min-width:80px;position:sticky;left:36px;z-index:2;">이름</th>
       ${allDates.map(d => {
         const dateObj = new Date(d + 'T00:00:00');
         const dow = DAYS[dayIdx(dateObj)];
@@ -2116,6 +2117,8 @@ function renderAttendanceTable(){
       }).join('')}
       <th style="${thStyle}">출석</th>
       <th style="${thStyle}">결석</th>
+      <th style="${thStyle}min-width:80px;">납부일</th>
+      <th style="${thStyle}min-width:80px;">수강료</th>
     </tr></thead>
     <tbody>`;
 
@@ -2164,16 +2167,37 @@ function renderAttendanceTable(){
       return `<td style="${tdStyle}vertical-align:top;">${periodCells}</td>`;
     });
 
+    const rowNum = students.indexOf(s) + 1;
+    const feeKey = `${monthStr}_${s.phone}`;
+    const feeData = (allAttendance[`fee_${monthStr}`] || {})[s.phone] || {};
+    const feeDate = feeData.date || '';
+    const feeAmount = feeData.amount || '';
+
     html += `<tr>
-      <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#F8F7FF;">${s.name}</td>
+      <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#EEF2FF;font-size:12px;color:var(--accent);font-weight:700;min-width:36px;position:sticky;left:0;z-index:1;">${rowNum}</td>
+      <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#F8F7FF;position:sticky;left:36px;z-index:1;">${s.name}</td>
       ${cells.join('')}
       <td style="${tdStyle}background:#ECFDF5;font-weight:700;color:#065F46;vertical-align:middle;">${presentCount}</td>
       <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;vertical-align:middle;">${absentCount}</td>
+      <td style="${tdStyle}vertical-align:middle;">
+        <input type="date" value="${feeDate}" onchange="saveFeeData('${monthStr}','${s.phone}','date',this.value)"
+          style="width:100%;border:1px solid var(--border);border-radius:6px;padding:3px 4px;font-size:11px;font-family:'Noto Sans KR',sans-serif;outline:none;">
+      </td>
+      <td style="${tdStyle}vertical-align:middle;">
+        <input type="number" value="${feeAmount}" placeholder="금액" onchange="saveFeeData('${monthStr}','${s.phone}','amount',this.value)"
+          style="width:80px;border:1px solid var(--border);border-radius:6px;padding:3px 4px;font-size:11px;font-family:'Noto Sans KR',sans-serif;outline:none;">
+      </td>
     </tr>`;
   });
 
   html += '</tbody></table>';
   document.getElementById('attendance-table').innerHTML = html;
+}
+
+async function saveFeeData(monthStr, phone, field, value){
+  try {
+    await db.ref(`attendance/fee_${monthStr}/${phone}/${field}`).set(value);
+  } catch(e){ showToast('저장 중 오류가 발생했습니다','error'); console.error(e); }
 }
 
 async function toggleAttendance(monthStr, studentKey, dateStr, currentStatus){
@@ -2213,44 +2237,54 @@ function exportAttendanceExcel(){
   });
 
   const allDates = [...new Set(Object.values(studentMap).flatMap(s => s.dates))].sort();
-  const students = Object.entries(studentMap)
-    .map(([sKey, s]) => ({sKey, ...s}))
-    .sort((a,b) => a.name.localeCompare(b.name,'ko') || a.pi - b.pi);
+  // 전화번호 기준 학생 묶기 (엑셀용)
+  const excelPhoneMap = {};
+  Object.entries(studentMap).forEach(([sKey, s]) => {
+    if(!excelPhoneMap[s.phone]) excelPhoneMap[s.phone] = {name:s.name, phone:s.phone, periods:{}};
+    excelPhoneMap[s.phone].periods[s.pi] = s.dates;
+  });
+  const students = Object.values(excelPhoneMap).sort((a,b) => a.name.localeCompare(b.name,'ko'));
 
   // 전체 카운트 맵 (엑셀용)
-  const excelPhoneGroups = {};
-  students.forEach(s => {
-    if(!excelPhoneGroups[s.phone]) excelPhoneGroups[s.phone] = [];
-    s.dates.forEach(d => excelPhoneGroups[s.phone].push({dateStr:d, pi:s.pi}));
-  });
   const excelSessionMap = {};
-  Object.entries(excelPhoneGroups).forEach(([phone, sessions]) => {
-    sessions.sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.pi - b.pi);
-    excelSessionMap[phone] = {};
-    sessions.forEach((sess, idx) => {
-      excelSessionMap[phone][`${sess.dateStr}_${sess.pi}`] = idx + 1;
+  students.forEach(s => {
+    const allSess = [];
+    Object.entries(s.periods).forEach(([pi, dates]) => {
+      dates.forEach(d => allSess.push({dateStr:d, pi:parseInt(pi)}));
+    });
+    allSess.sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.pi - b.pi);
+    excelSessionMap[s.phone] = {};
+    allSess.forEach((sess, idx) => {
+      excelSessionMap[s.phone][`${sess.dateStr}_${sess.pi}`] = idx + 1;
     });
   });
 
   // CSV 생성
-  const headers = ['이름','교시', ...allDates.map(d => {
+  const headers = ['#','이름', ...allDates.map(d => {
     const dateObj = new Date(d + 'T00:00:00');
     return `${dateObj.getMonth()+1}/${dateObj.getDate()}(${DAYS[dayIdx(dateObj)]})`;
-  }), '출석', '결석'];
+  }), '출석', '결석', '납부일', '수강료'];
 
-  const rows = students.map(s => {
-    const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
+  const rows = students.map((s, rowIdx) => {
     let presentCount = 0, absentCount = 0;
     const cells = allDates.map(d => {
-      if(!s.dates.includes(d)) return '-';
-      const sessionNum = (excelSessionMap[s.phone] || {})[`${d}_${s.pi}`] || 0;
-      const status = attendNode[d];
-      if(status === 'present'){ presentCount++; return `${sessionNum}T`; }
-      if(status === 'absent'){ absentCount++; return `${sessionNum}Tx`; }
+      const dayPeriods = Object.entries(s.periods)
+        .filter(([pi, dates]) => dates.includes(d))
+        .sort((a,b) => parseInt(a[0])-parseInt(b[0]));
+      if(dayPeriods.length === 0) return '-';
       const isPast = d < dateKey(new Date());
-      return isPast ? '?' : '0';
+      return dayPeriods.map(([pi]) => {
+        pi = parseInt(pi);
+        const attNode2 = (allAttendance[monthStr]||{})[`${s.phone}_${pi}`]||{};
+        const sessionNum = (excelSessionMap[s.phone]||{})[`${d}_${pi}`]||0;
+        const status = attNode2[d];
+        if(status === 'present'){ presentCount++; return `${sessionNum}T`; }
+        if(status === 'absent'){ absentCount++; return `${sessionNum}Tx`; }
+        return isPast ? '?' : '0';
+      }).join('/');
     });
-    return [s.name, PERIODS[s.pi].label, ...cells, presentCount, absentCount];
+    const feeData2 = (allAttendance[`fee_${monthStr}`] || {})[s.phone] || {};
+    return [rowIdx+1, s.name, ...cells, presentCount, absentCount, feeData2.date||'', feeData2.amount||''];
   });
 
   const csvContent = [headers, ...rows]
