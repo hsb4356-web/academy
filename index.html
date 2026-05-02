@@ -266,65 +266,85 @@
     <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="adminLogin()">로그인</button>
   </div>
   <div id="admin-panel" style="display:none">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+    <!-- 상단: 로그아웃 + 탭 -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <div class="tab-btns" id="admin-tab-btns">
+        <button class="tab-btn active" onclick="showAdminTab('roster')">📊 수강현황</button>
+        <button class="tab-btn" onclick="showAdminTab('approval')">✅ 승인</button>
+        <button class="tab-btn" onclick="showAdminTab('attendance')">📋 출석부</button>
+      </div>
       <button onclick="adminLogout()" style="padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:#fff;color:var(--text2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:600;">로그아웃</button>
     </div>
 
-    <div class="admin-section">
-      <h3>📅 휴강 설정 (클릭하면 휴강/정상 전환)</h3>
-      <div class="week-nav" style="margin-bottom:16px">
-        <button class="nav-btn" onclick="changeWeek(-1)">&#8592;</button>
-        <h2 id="admin-week-title"></h2>
-        <button class="nav-btn" onclick="changeWeek(1)">&#8594;</button>
-      </div>
-      <div class="toggle-closed-grid" id="toggle-grid"></div>
-    </div>
-
-    <div class="admin-section">
-      <h3>🎌 공휴일 관리</h3>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">정기 신청 시 공휴일은 자동으로 제외되고 월 4회씩 채워집니다</p>
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <input type="date" id="holiday-date-input"
-          style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
-        <input type="text" id="holiday-name-input" placeholder="예: 현충일"
-          style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
-        <button onclick="addHoliday()"
-          style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;white-space:nowrap;">추가</button>
-      </div>
-      <div id="holiday-list"></div>
-    </div>
-
-    <div class="admin-section">
-      <h3>👥 수강 현황표</h3>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">셀을 클릭하면 신청자 목록을 확인하고 승인/취소할 수 있습니다</p>
-      <div id="roster-month-view">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <button class="nav-btn" onclick="changeRosterMonth(-1)">&#8592;</button>
-          <h4 id="roster-month-title" style="font-size:16px;font-weight:700;"></h4>
-          <button class="nav-btn" onclick="changeRosterMonth(1)">&#8594;</button>
+    <!-- 탭1: 수강 현황표 (기본) -->
+    <div id="admin-tab-roster">
+      <div class="admin-section">
+        <h3>👥 수강 현황표</h3>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">셀을 클릭하면 신청자 목록을 확인하고 승인/취소할 수 있습니다</p>
+        <div id="roster-month-view">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <button class="nav-btn" onclick="changeRosterMonth(-1)">&#8592;</button>
+            <h4 id="roster-month-title" style="font-size:16px;font-weight:700;"></h4>
+            <button class="nav-btn" onclick="changeRosterMonth(1)">&#8594;</button>
+          </div>
+          <div id="roster-month-content" style="overflow-x:auto;"></div>
         </div>
-        <div id="roster-month-content" style="overflow-x:auto;"></div>
+      </div>
+
+      <div class="admin-section">
+        <h3>📅 휴강 설정 (클릭하면 휴강/정상 전환)</h3>
+        <div class="week-nav" style="margin-bottom:16px">
+          <button class="nav-btn" onclick="changeWeek(-1)">&#8592;</button>
+          <h2 id="admin-week-title"></h2>
+          <button class="nav-btn" onclick="changeWeek(1)">&#8594;</button>
+        </div>
+        <div class="toggle-closed-grid" id="toggle-grid"></div>
+      </div>
+
+      <div class="admin-section">
+        <h3>🎌 공휴일 관리</h3>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">정기 신청 시 공휴일은 자동으로 제외됩니다</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="date" id="holiday-date-input"
+            style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+          <input type="text" id="holiday-name-input" placeholder="예: 현충일"
+            style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+          <button onclick="addHoliday()"
+            style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;white-space:nowrap;">추가</button>
+        </div>
+        <div id="holiday-list"></div>
       </div>
     </div>
 
-    <div class="admin-section">
-      <h3>📋 신청자 명단</h3>
-      <div style="margin-bottom:12px;">
-        <input type="text" id="admin-search" placeholder="이름 또는 전화번호로 검색..." oninput="renderBookingsList()"
-          style="width:100%;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 16px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+    <!-- 탭2: 승인 패널 -->
+    <div id="admin-tab-approval" style="display:none">
+      <div class="admin-section">
+        <h3>📋 신청자 명단</h3>
+        <div style="margin-bottom:12px;">
+          <input type="text" id="admin-search" placeholder="이름 또는 전화번호로 검색..." oninput="renderBookingsList()"
+            style="width:100%;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 16px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+        </div>
+        <div class="filter-bar">
+          <button class="filter-btn active" onclick="setFilter('all',this)">전체</button>
+          <button class="filter-btn" onclick="setFilter('pending',this)">대기중</button>
+          <button class="filter-btn" onclick="setFilter('approved',this)">승인됨</button>
+          <button class="filter-btn" onclick="setFilter('cancelled',this)">취소됨</button>
+          <button class="filter-btn" onclick="setFilter('easel',this)">이젤</button>
+          <button class="filter-btn" onclick="setFilter('desk',this)">책상</button>
+          <button class="filter-btn" onclick="setFilter('regular',this)">🔄 정기</button>
+          <button class="filter-btn" style="color:#065F46;border-color:#10B981;background:#ECFDF5;font-weight:700;" onclick="approveAllPending()">✅ 대기중 일괄승인</button>
+          <button class="filter-btn" style="color:var(--danger);border-color:var(--danger)" onclick="deleteAllCancelled()">🗑️ 취소 전체삭제</button>
+        </div>
+        <div class="bookings-list" id="bookings-list"></div>
       </div>
-      <div class="filter-bar">
-        <button class="filter-btn active" onclick="setFilter('all',this)">전체</button>
-        <button class="filter-btn" onclick="setFilter('pending',this)">대기중</button>
-        <button class="filter-btn" onclick="setFilter('approved',this)">승인됨</button>
-        <button class="filter-btn" onclick="setFilter('cancelled',this)">취소됨</button>
-        <button class="filter-btn" onclick="setFilter('desk',this)">책상</button>
-        <button class="filter-btn" onclick="setFilter('easel',this)">이젤</button>
-        <button class="filter-btn" onclick="setFilter('regular',this)">🔄 정기</button>
-        <button class="filter-btn" style="color:#065F46;border-color:#10B981;background:#ECFDF5;font-weight:700;" onclick="approveAllPending()">✅ 대기중 일괄승인</button>
-        <button class="filter-btn" style="color:var(--danger);border-color:var(--danger)" onclick="deleteAllCancelled()">🗑️ 취소 전체삭제</button>
+    </div>
+
+    <!-- 탭3: 출석부 (추후 구현) -->
+    <div id="admin-tab-attendance" style="display:none">
+      <div class="admin-section">
+        <h3>📋 출석부</h3>
+        <p style="font-size:14px;color:var(--text2);">출석부 기능은 곧 추가될 예정입니다.</p>
       </div>
-      <div class="bookings-list" id="bookings-list"></div>
     </div>
   </div>
 </main>
@@ -1970,6 +1990,19 @@ async function submitBulkChange(){
 
   } catch(e){ showToast('변경 중 오류가 발생했습니다','error'); console.error(e); }
   showLoading(false);
+}
+
+
+// ── 관리자 탭 전환 ──
+function showAdminTab(tab){
+  ['roster','approval','attendance'].forEach(t => {
+    document.getElementById(`admin-tab-${t}`).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#admin-tab-btns .tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['roster','approval','attendance'][i]===tab);
+  });
+  if(tab==='roster') renderAdmin();
+  if(tab==='approval') renderBookingsList();
 }
 
 // ── 관리자 로그인 (Firebase Auth) ──
