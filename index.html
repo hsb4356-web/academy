@@ -848,13 +848,24 @@ function renderStudentCalendar(){
 
       if(!isClosed2) allClosed2 = false;
 
+      const periodColors = [
+        {bg:'#ECFDF5',color:'#065F46',border:'#6EE7B7'}, // 1교시: 초록
+        {bg:'#FFF7ED',color:'#9A3412',border:'#FED7AA'}, // 2교시: 주황
+        {bg:'#F5F3FF',color:'#5B21B6',border:'#DDD6FE'}, // 3교시: 보라
+      ];
+      const pc = periodColors[pi];
       if(isClosed2){
-        periodsHtml += `<div class="student-period-badge closed-period">${p.label} 휴강</div>`;
+        periodsHtml += `<div class="student-period-badge closed-period" style="border-left:3px solid #D1D5DB;">${p.label} 휴강</div>`;
       } else if(isPast){
-        periodsHtml += `<div class="student-period-badge" style="background:#F3F4F6;color:var(--text3);">${p.label}</div>`;
+        periodsHtml += `<div class="student-period-badge" style="background:#F3F4F6;color:var(--text3);border-left:3px solid #E5E7EB;">${p.label}</div>`;
       } else {
-        periodsHtml += `<div class="student-period-badge easel${easelLeft<=0?' full':''}">이젤 ${easelLeft<=0?'✕':easelLeft}</div>`;
-        periodsHtml += `<div class="student-period-badge desk${deskLeft<=0?' full':''}">책상 ${deskLeft<=0?'✕':deskLeft}</div>`;
+        periodsHtml += `<div style="background:${pc.bg};border:1px solid ${pc.border};border-left:3px solid ${pc.color};border-radius:4px;padding:3px 4px;margin-bottom:1px;">`;
+        periodsHtml += `<div style="font-size:9px;font-weight:700;color:${pc.color};margin-bottom:1px;">${p.label}</div>`;
+        periodsHtml += `<div style="display:flex;gap:2px;">`;
+        periodsHtml += `<span style="font-size:9px;font-weight:600;color:${easelLeft<=0?'#9CA3AF':pc.color};">이젤${easelLeft<=0?'✕':easelLeft}</span>`;
+        periodsHtml += `<span style="font-size:9px;color:#D1D5DB;">|</span>`;
+        periodsHtml += `<span style="font-size:9px;font-weight:600;color:${deskLeft<=0?'#9CA3AF':pc.color};">책상${deskLeft<=0?'✕':deskLeft}</span>`;
+        periodsHtml += `</div></div>`;
       }
     });
     periodsHtml += '</div>';
