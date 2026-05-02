@@ -972,10 +972,10 @@ async function submitBooking(){
     const key = selectedCell.key;
     const pi = selectedCell.pi;
 
-    // 중복 체크
+    // 중복 체크 (자리 종류 무관, 같은 날 같은 시간 동일 전화번호 불가)
     const existing = Object.values(allBookings[key]||{});
     if(existing.find(b => b.phone===phone && b.status!=='cancelled')){
-      showLoading(false); showToast('이미 신청된 전화번호입니다','error'); return;
+      showLoading(false); showToast('이미 같은 날 같은 시간에 신청된 전화번호입니다','error'); return;
     }
     const used = countByType(key, selectedSeatType);
     const max = selectedSeatType==='desk' ? MAX_DESK : MAX_EASEL;
@@ -1033,7 +1033,8 @@ async function submitBooking(){
 
         for(const futureDate of mg.dates){
           const fKey = cellKey(futureDate, pi);
-          const fExisting = Object.values(allBookings[fKey]||{});
+          const fSnap = await db.ref(`bookings/${fKey}`).once('value');
+          const fExisting = Object.values(fSnap.val() || {});
           if(fExisting.find(b => b.phone===phone && b.status!=='cancelled')) continue;
           const fUsed = countByType(fKey, selectedSeatType);
           if(fUsed >= max) continue;
