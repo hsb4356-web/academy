@@ -2070,24 +2070,29 @@ function renderAttendanceTable(){
     return;
   }
 
-  // 학생 정렬: 이름순, 같은 이름이면 교시순
-  const students = Object.entries(studentMap)
-    .map(([sKey, s]) => ({sKey, ...s}))
-    .sort((a,b) => a.name.localeCompare(b.name,'ko') || a.pi - b.pi);
-
-  // 전체 카운트 맵 생성: 같은 전화번호의 모든 수업을 날짜+교시 순으로 정렬 후 번호 부여
-  // globalSessionMap[phone][dateStr_pi] = 전체 순서 번호
-  const globalSessionMap = {};
-  const phoneGroups = {};
-  students.forEach(s => {
-    if(!phoneGroups[s.phone]) phoneGroups[s.phone] = [];
-    s.dates.forEach(d => phoneGroups[s.phone].push({dateStr:d, pi:s.pi}));
+  // 전화번호 기준으로 학생 묶기 (행은 전화번호 1개당 1행)
+  const phoneStudentMap = {};
+  Object.entries(studentMap).forEach(([sKey, s]) => {
+    if(!phoneStudentMap[s.phone]){
+      phoneStudentMap[s.phone] = {name:s.name, phone:s.phone, periods:{}};
+    }
+    phoneStudentMap[s.phone].periods[s.pi] = s.dates;
   });
-  Object.entries(phoneGroups).forEach(([phone, sessions]) => {
-    sessions.sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.pi - b.pi);
-    globalSessionMap[phone] = {};
-    sessions.forEach((sess, idx) => {
-      globalSessionMap[phone][`${sess.dateStr}_${sess.pi}`] = idx + 1;
+
+  const students = Object.values(phoneStudentMap)
+    .sort((a,b) => a.name.localeCompare(b.name,'ko'));
+
+  // 전체 카운트 맵: 날짜+교시 순으로 번호 부여
+  const globalSessionMap = {};
+  students.forEach(s => {
+    const allSessions = [];
+    Object.entries(s.periods).forEach(([pi, dates]) => {
+      dates.forEach(d => allSessions.push({dateStr:d, pi:parseInt(pi)}));
+    });
+    allSessions.sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.pi - b.pi);
+    globalSessionMap[s.phone] = {};
+    allSessions.forEach((sess, idx) => {
+      globalSessionMap[s.phone][`${sess.dateStr}_${sess.pi}`] = idx + 1;
     });
   });
 
@@ -2102,7 +2107,6 @@ function renderAttendanceTable(){
   let html = `<table style="border-collapse:collapse;min-width:600px;width:100%;">
     <thead><tr>
       <th style="${thStyle}min-width:80px;position:sticky;left:0;z-index:2;">이름</th>
-      <th style="${thStyle}min-width:50px;">교시</th>
       ${allDates.map(d => {
         const dateObj = new Date(d + 'T00:00:00');
         const dow = DAYS[dayIdx(dateObj)];
@@ -2115,59 +2119,56 @@ function renderAttendanceTable(){
     </tr></thead>
     <tbody>`;
 
-  // 같은 전화번호 몇 개 교시인지 파악 (이름 병합용)
-  const phoneRowCount = {};
   students.forEach(s => {
-    phoneRowCount[s.phone] = (phoneRowCount[s.phone] || 0) + 1;
-  });
-  const phoneFirstRow = {}; // 첫 번째 행인지 추적
-
-  students.forEach(s => {
-    const color = periodColors[s.pi] || '#374151';
-    const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${s.pi}`] || {};
-    const isFirstRow = !phoneFirstRow[s.phone];
-    if(isFirstRow) phoneFirstRow[s.phone] = true;
-    const rowSpan = phoneRowCount[s.phone];
-
     let presentCount = 0, absentCount = 0;
 
     const cells = allDates.map(d => {
-      if(!s.dates.includes(d)){
+      // 이 날짜에 해당 학생의 교시 목록
+      const dayPeriods = Object.entries(s.periods)
+        .filter(([pi, dates]) => dates.includes(d))
+        .sort((a,b) => parseInt(a[0])-parseInt(b[0]));
+
+      if(dayPeriods.length === 0){
         return `<td style="${tdStyle}background:#FAFAFA;color:#D1D5DB;">-</td>`;
       }
-      const sessionNum = (globalSessionMap[s.phone] || {})[`${d}_${s.pi}`] || 0;
-      const status = attendNode[d];
+
       const isPast = d < todayStr;
       const isToday2 = d === todayStr;
 
-      if(status === 'present'){
-        presentCount++;
-        return `<td style="${tdStyle}background:#ECFDF5;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}','present')">
-          <span style="color:#065F46;font-weight:700;">${sessionNum}T</span></td>`;
-      } else if(status === 'absent'){
-        absentCount++;
-        return `<td style="${tdStyle}background:#FEF2F2;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}','absent')">
-          <span style="color:#991B1B;font-weight:700;">${sessionNum}Tx</span></td>`;
-      } else if(isPast || isToday2){
-        return `<td style="${tdStyle}background:#FFFBEB;cursor:pointer;" onclick="toggleAttendance('${monthStr}','${s.phone}_${s.pi}','${d}',null)">
-          <span style="color:#D97706;font-weight:600;">?</span></td>`;
-      } else {
-        return `<td style="${tdStyle}background:#F9FAFB;">
-          <span style="color:#9CA3AF;font-weight:600;">0</span></td>`;
-      }
+      // 교시별 셀 내용 생성
+      const periodCells = dayPeriods.map(([pi, dates]) => {
+        pi = parseInt(pi);
+        const attendNode = (allAttendance[monthStr] || {})[`${s.phone}_${pi}`] || {};
+        const sessionNum = (globalSessionMap[s.phone] || {})[`${d}_${pi}`] || 0;
+        const status = attendNode[d];
+        const color = periodColors[pi] || '#374151';
+        const label = dayPeriods.length > 1 ? `<span style="font-size:8px;color:${color};font-weight:600;">${PERIODS[pi].label}</span><br>` : '';
+
+        if(status === 'present'){
+          presentCount++;
+          return `<div onclick="toggleAttendance('${monthStr}','${s.phone}_${pi}','${d}','present')" style="cursor:pointer;background:#ECFDF5;border-radius:4px;padding:2px 3px;margin-bottom:2px;">
+            ${label}<span style="color:#065F46;font-weight:700;font-size:12px;">${sessionNum}T</span></div>`;
+        } else if(status === 'absent'){
+          absentCount++;
+          return `<div onclick="toggleAttendance('${monthStr}','${s.phone}_${pi}','${d}','absent')" style="cursor:pointer;background:#FEF2F2;border-radius:4px;padding:2px 3px;margin-bottom:2px;">
+            ${label}<span style="color:#991B1B;font-weight:700;font-size:12px;">${sessionNum}Tx</span></div>`;
+        } else if(isPast || isToday2){
+          return `<div onclick="toggleAttendance('${monthStr}','${s.phone}_${pi}','${d}',null)" style="cursor:pointer;background:#FFFBEB;border-radius:4px;padding:2px 3px;margin-bottom:2px;">
+            ${label}<span style="color:#D97706;font-weight:600;font-size:12px;">?</span></div>`;
+        } else {
+          return `<div style="background:#F9FAFB;border-radius:4px;padding:2px 3px;margin-bottom:2px;">
+            ${label}<span style="color:#9CA3AF;font-weight:600;font-size:12px;">0</span></div>`;
+        }
+      }).join('');
+
+      return `<td style="${tdStyle}vertical-align:top;">${periodCells}</td>`;
     });
 
-    // 이름 셀: 첫 번째 행만 rowspan으로 병합
-    const nameCell = isFirstRow
-      ? `<td rowspan="${rowSpan}" style="${nameTdStyle}border-bottom:2px solid #C7D2FE;vertical-align:middle;text-align:center;background:#F8F7FF;">${s.name}</td>`
-      : '';
-
-    html += `<tr style="${isFirstRow && rowSpan>1 ? '' : ''}border-top:${isFirstRow && rowSpan>1?'2px solid #C7D2FE':'1px solid #E2E5EF'}">
-      ${nameCell}
-      <td style="padding:6px 4px;border:1px solid #E2E5EF;text-align:center;font-size:11px;font-weight:700;color:${color};white-space:nowrap;background:${color}18;">${PERIODS[s.pi].label}</td>
+    html += `<tr>
+      <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#F8F7FF;">${s.name}</td>
       ${cells.join('')}
-      <td style="${tdStyle}background:#ECFDF5;font-weight:700;color:#065F46;">${presentCount}</td>
-      <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;">${absentCount}</td>
+      <td style="${tdStyle}background:#ECFDF5;font-weight:700;color:#065F46;vertical-align:middle;">${presentCount}</td>
+      <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;vertical-align:middle;">${absentCount}</td>
     </tr>`;
   });
 
