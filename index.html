@@ -220,8 +220,8 @@
     <button class="nav-btn" onclick="changeWeek(1)">&#8594;</button>
   </div>
   <div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background:var(--desk-color)"></div> 책상 (최대 4명)</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--easel-color)"></div> 이젤 (최대 5명)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--desk-color)"></div> 책상 (최대 4명)</div>
     <div class="legend-item"><div class="legend-dot" style="background:#D1D5DB"></div> 휴강</div>
     <div class="legend-item" style="font-size:11px;color:var(--text2)">숫자 = 남은 자리</div>
     <button onclick="openMyBookings()" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📋 내 수업</button>
@@ -368,13 +368,13 @@
     </div>
 
     <div class="seat-select">
-      <div class="seat-select-card" id="card-desk" onclick="selectSeatType('desk')">
-        <div class="seat-name">책상 자리</div>
-        <div class="seat-remain" id="desk-remain"></div>
-      </div>
       <div class="seat-select-card" id="card-easel" onclick="selectSeatType('easel')">
         <div class="seat-name">이젤 자리</div>
         <div class="seat-remain" id="easel-remain"></div>
+      </div>
+      <div class="seat-select-card" id="card-desk" onclick="selectSeatType('desk')">
+        <div class="seat-name">책상 자리</div>
+        <div class="seat-remain" id="desk-remain"></div>
       </div>
     </div>
 
@@ -437,13 +437,13 @@
     </div>
 
     <div class="seat-select">
-      <div class="seat-select-card" id="change-card-desk" onclick="selectChangeSeat('desk')">
-        <div class="seat-name">책상 자리</div>
-        <div class="seat-remain" id="change-desk-remain">-</div>
-      </div>
       <div class="seat-select-card" id="change-card-easel" onclick="selectChangeSeat('easel')">
         <div class="seat-name">이젤 자리</div>
         <div class="seat-remain" id="change-easel-remain">-</div>
+      </div>
+      <div class="seat-select-card" id="change-card-desk" onclick="selectChangeSeat('desk')">
+        <div class="seat-name">책상 자리</div>
+        <div class="seat-remain" id="change-desk-remain">-</div>
       </div>
     </div>
 
@@ -480,11 +480,11 @@
     </div>
 
     <div class="seat-select">
-      <div class="seat-select-card" id="bulk-card-desk" onclick="selectBulkSeat('desk')">
-        <div class="seat-name">책상 자리</div>
-      </div>
       <div class="seat-select-card" id="bulk-card-easel" onclick="selectBulkSeat('easel')">
         <div class="seat-name">이젤 자리</div>
+      </div>
+      <div class="seat-select-card" id="bulk-card-desk" onclick="selectBulkSeat('desk')">
+        <div class="seat-name">책상 자리</div>
       </div>
     </div>
 
@@ -740,13 +740,13 @@ function renderSchedule(){
       } else {
         cell.innerHTML = `
           <div class="seat-row">
-            <div class="seat-badge desk${deskLeft<=0?' full-type':''}">
-              <span class="seat-count">${deskLeft<=0?'✕':deskLeft}</span>
-              <span class="seat-label-text">책상/${MAX_DESK}</span>
-            </div>
             <div class="seat-badge easel${easelLeft<=0?' full-type':''}">
               <span class="seat-count">${easelLeft<=0?'✕':easelLeft}</span>
               <span class="seat-label-text">이젤/${MAX_EASEL}</span>
+            </div>
+            <div class="seat-badge desk${deskLeft<=0?' full-type':''}">
+              <span class="seat-count">${deskLeft<=0?'✕':deskLeft}</span>
+              <span class="seat-label-text">책상/${MAX_DESK}</span>
             </div>
           </div>
           ${deadlinePassed?'<div style="font-size:9px;color:var(--text3);margin-top:2px;font-weight:600;">신청마감</div>':''}
@@ -1894,7 +1894,7 @@ function openCellDetail(date, pi, key){
   document.getElementById('cell-detail-title').textContent =
     `${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label}`;
   document.getElementById('cell-detail-subtitle').textContent =
-    `${p.time} · 책상 ${deskUsed}/${MAX_DESK}명 · 이젤 ${easelUsed}/${MAX_EASEL}명`;
+    `${p.time} · 이젤 ${easelUsed}/${MAX_EASEL}명 · 책상 ${deskUsed}/${MAX_DESK}명`;
 
   const content = document.getElementById('cell-detail-content');
 
