@@ -387,6 +387,9 @@
         <button class="month-btn" onclick="selectMonths(2,this)">2개월 (8회)</button>
         <button class="month-btn" onclick="selectMonths(3,this)">3개월 (12회)</button>
       </div>
+      <div style="margin-top:8px;">
+        <button class="month-btn" id="btn-repeat-last" onclick="selectRepeatLast(this)" style="width:100%;background:var(--accent-light);border-color:var(--accent);color:var(--accent);">🔁 지난달과 동일하게 신청</button>
+      </div>
       <div id="regular-preview" style="margin-top:10px;font-size:12px;color:var(--text2);line-height:1.8;"></div>
     </div>
 
@@ -985,6 +988,8 @@ function selectBookingType(type){
   selectedMonths = null;
   document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('regular-preview').innerHTML = '';
+  const repeatBtn = document.getElementById('btn-repeat-last');
+  if(repeatBtn) repeatBtn.classList.remove('selected');
 }
 
 function selectMonths(n, btn){
@@ -1066,6 +1071,108 @@ function selectMonths(n, btn){
 }
 
 
+
+// ── 지난달과 동일하게 신청 ──
+async function selectRepeatLast(btn){
+  if(!selectedCell){ showToast('날짜를 먼저 선택해주세요','error'); return; }
+
+  // 버튼 선택 상태 토글
+  document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedMonths = 'repeat';
+
+  const pi = selectedCell.pi;
+  const today = new Date();
+  const lastMonth = new Date(today.getFullYear(), today.getMonth()-1, 1);
+  const lastMonthStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth()+1).padStart(2,'0')}`;
+  const thisMonthStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+
+  // 전화번호 확인
+  const phone = document.getElementById('input-phone').value.trim();
+  const preview = document.getElementById('regular-preview');
+
+  if(!phone || phone.length < 9){
+    preview.innerHTML = `<div class="notice-warning notice-box">📱 먼저 전화번호를 입력해주세요. 입력 후 다시 눌러주세요.</div>`;
+    return;
+  }
+
+  preview.innerHTML = `<div style="text-align:center;padding:12px;color:var(--text2);font-size:13px;">지난달 내역을 불러오는 중...</div>`;
+
+  // 지난달 같은 교시, 같은 전화번호 신청 내역 찾기
+  const lastMonthBookings = [];
+  Object.entries(allBookings).forEach(([key, bMap]) => {
+    const [dateStr, keyPi] = key.split('_');
+    if(dateStr.startsWith(lastMonthStr) && parseInt(keyPi) === pi){
+      Object.values(bMap).forEach(b => {
+        if(b.phone === phone && b.status !== 'cancelled'){
+          lastMonthBookings.push(new Date(dateStr + 'T00:00:00'));
+        }
+      });
+    }
+  });
+
+  if(lastMonthBookings.length === 0){
+    preview.innerHTML = `<div class="notice-danger notice-box">❌ 지난달 같은 교시에 신청 내역이 없습니다. 이름과 전화번호를 먼저 입력하고 이번달을 직접 선택해주세요.</div>`;
+    return;
+  }
+
+  // 지난달 요일 파악 (첫 번째 수업 기준)
+  lastMonthBookings.sort((a,b) => a-b);
+  const dow = lastMonthBookings[0].getDay(); // 0=일,1=월,...
+
+  // 이번달 같은 요일 날짜 계산 (공휴일+휴강 제외)
+  const thisYear = today.getFullYear();
+  const thisMonth = today.getMonth();
+  const endOfThisMonth = new Date(thisYear, thisMonth+1, 0);
+  const thisDates = [];
+  const cur = new Date(thisYear, thisMonth, 1);
+  // 이번달 첫 번째 해당 요일 찾기
+  while(cur.getDay() !== dow) cur.setDate(cur.getDate()+1);
+  while(cur <= endOfThisMonth){
+    const dk = dateKey(cur);
+    if(!isHoliday(dk) && !isCellClosed(dk, pi)){
+      thisDates.push(new Date(cur));
+    }
+    cur.setDate(cur.getDate()+7);
+  }
+
+  if(thisDates.length === 0){
+    preview.innerHTML = `<div class="notice-danger notice-box">❌ 이번달 신청 가능한 날짜가 없습니다.</div>`;
+    return;
+  }
+
+  // 지난달 이름 자동 입력
+  const lastBooking = Object.values(Object.values(allBookings).find((bMap,_) => {
+    return Object.values(bMap||{}).some(b => b.phone===phone && b.status!=='cancelled');
+  }) || {}).find(b => b.phone===phone && b.status!=='cancelled');
+  if(lastBooking && !document.getElementById('input-name').value.trim()){
+    document.getElementById('input-name').value = lastBooking.name || '';
+  }
+
+  // 체크박스 UI (기본 4개, 5주달이면 5주차 별도 표시)
+  const is5Week = thisDates.length >= 5;
+  const checkItems = thisDates.map((d, i) => {
+    const dk = dateKey(d);
+    const is5th = i >= 4;
+    const checked = i < 4 ? 'checked' : '';
+    const dStr = `${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]})`;
+    const badge = is5th ? `<span style="font-size:10px;background:#FEF2F2;color:#991B1B;border-radius:4px;padding:1px 5px;margin-left:4px;">5주차</span>` : '';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1.5px solid ${is5th?'#FECACA':'var(--border)'};background:${is5th?'#FFF5F5':'#fff'};cursor:pointer;margin-bottom:6px;">
+      <input type="checkbox" value="${dk}" ${checked} onchange="updateThisMonthSelection()" style="width:18px;height:18px;accent-color:var(--regular);cursor:pointer;">
+      <span style="font-size:14px;font-weight:600;color:var(--text);">${dStr}</span>${badge}
+    </label>`;
+  }).join('');
+
+  const dowLabel = ['일','월','화','수','목','금','토'][dow];
+  preview.innerHTML = `
+    <div style="margin-bottom:8px;font-weight:700;color:var(--text);">지난달과 동일: 매주 ${dowLabel}요일 · ${thisDates.length}개 날짜</div>
+    ${is5Week ? `<div class="notice-warning notice-box" style="margin-bottom:10px;">⚠️ 이번달은 5주가 있습니다. 원하는 날짜를 선택해주세요.</div>` : ''}
+    <div id="this-month-checks">${checkItems}</div>
+    <div id="this-month-notice" style="margin-top:8px;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:600;"></div>`;
+
+  updateThisMonthSelection();
+}
+
 // ── 이번달 체크박스 선택 업데이트 ──
 function updateThisMonthSelection(){
   const checks = document.querySelectorAll('#this-month-checks input[type=checkbox]');
@@ -1134,6 +1241,10 @@ async function submitBooking(){
   if(!selectedSeatType){ showToast('자리 종류를 선택해주세요','error'); return; }
   if(bookingType === 'regular' && selectedMonths === null){
     showToast('신청 기간을 선택해주세요','error'); return;
+  }
+  if(bookingType === 'regular' && selectedMonths === 'repeat'){
+    // 지난달 반복: 체크박스 날짜 사용 (이번달과 동일 처리)
+    selectedMonths = 0;
   }
   const name = document.getElementById('input-name').value.trim();
   const phone = document.getElementById('input-phone').value.trim();
