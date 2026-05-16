@@ -2410,10 +2410,7 @@ async function bulkAddMembersFromBookings(){
     return;
   }
 
-  if(!confirm(`신청자 중 미등록 회원 ${newMembers.length}명을 등록할까요?
-
-${newMembers.map(([phone,name])=>`${name} (${phone})`).join('
-')}`)) return;
+  if(!confirm('신청자 중 미등록 회원 ' + newMembers.length + '명을 등록할까요?')) return;
 
   showLoading(true);
   try {
