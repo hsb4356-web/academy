@@ -279,6 +279,20 @@
     <!-- 탭1: 수강 현황표 (기본) -->
     <div id="admin-tab-roster">
       <div class="admin-section">
+        <h3>👤 회원 관리</h3>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">등록된 회원만 수업 신청이 가능합니다. 이름과 전화번호가 일치해야 합니다.</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <input type="text" id="member-name-input" placeholder="이름"
+            style="flex:1;min-width:80px;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+          <input type="tel" id="member-phone-input" placeholder="010-0000-0000" oninput="formatPhone(this)"
+            style="flex:1;min-width:120px;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+          <button onclick="addMember()"
+            style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;white-space:nowrap;">추가</button>
+        </div>
+        <div id="member-list"></div>
+      </div>
+
+      <div class="admin-section">
         <h3>👥 수강 현황표</h3>
         <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">셀을 클릭하면 신청자 목록을 확인하고 승인/취소할 수 있습니다</p>
         <div id="roster-month-view">
@@ -552,6 +566,28 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('bulk-change-modal');document.getElementById('my-modal').classList.add('show');">취소</button>
       <button class="btn btn-regular" onclick="submitBulkChange()">전체 변경하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 신청자 수정 모달 -->
+<div class="modal-overlay" id="edit-booking-modal">
+  <div class="modal">
+    <span class="modal-handle"></span>
+    <button class="modal-close" onclick="closeModal('edit-booking-modal')">✕</button>
+    <h3>✏️ 신청자 정보 수정</h3>
+    <div class="modal-subtitle" id="edit-booking-subtitle"></div>
+    <div class="form-group">
+      <label>이름</label>
+      <input type="text" id="edit-name-input" placeholder="홍길동">
+    </div>
+    <div class="form-group">
+      <label>전화번호</label>
+      <input type="tel" id="edit-phone-input" placeholder="010-0000-0000" oninput="formatPhone(this)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('edit-booking-modal')">취소</button>
+      <button class="btn btn-primary" onclick="submitEditBooking()">저장</button>
     </div>
   </div>
 </div>
@@ -1288,6 +1324,21 @@ async function submitBooking(){
   if(!name){ showToast('이름을 입력해주세요','error'); return; }
   if(!phone || phone.length < 9){ showToast('전화번호를 입력해주세요','error'); return; }
 
+  // 회원 검증 (회원 목록이 있는 경우에만)
+  if(Object.keys(allMembers).length > 0){
+    const member = Object.values(allMembers).find(m => m.phone === phone);
+    if(!member){
+      showLoading(false);
+      showToast('등록되지 않은 전화번호입니다. 원장님께 문의해주세요','error');
+      return;
+    }
+    if(member.name !== name){
+      showLoading(false);
+      showToast(`전화번호와 이름이 일치하지 않습니다 (등록된 이름: ${member.name})`, 'error');
+      return;
+    }
+  }
+
   showLoading(true);
   try {
     const key = selectedCell.key;
@@ -2004,6 +2055,7 @@ async function submitBulkChange(){
     );
 
     closeModal('bulk-change-modal');
+    closeModal('edit-booking-modal');
     showToast(bulkChangeName + '님 정기신청 전체 변경 완료! 총 ' + successCount + '회 ✅', 'success');
 
     myBookingsData = [];
@@ -2190,6 +2242,27 @@ function renderAttendanceTable(){
     </tr>`;
   });
 
+  // 수강료 합계 행
+  const feeMonth = allAttendance[`fee_${monthStr}`] || {};
+  let totalFee = 0;
+  let totalPaid = 0;
+  students.forEach(s => {
+    const feeData = feeMonth[s.phone] || {};
+    const amt = parseFloat(feeData.amount || 0);
+    if(!isNaN(amt) && amt > 0) totalPaid += amt;
+  });
+  totalFee = students.length * 4; // 참고용
+
+  html += `<tr style="background:#F8F7FF;border-top:2px solid #C7D2FE;">
+    <td colspan="2" style="padding:10px 12px;font-weight:700;font-size:13px;color:var(--accent);border:1px solid #E2E5EF;position:sticky;left:0;background:#F8F7FF;">💰 수강료 합계</td>
+    ${allDates.map(() => `<td style="border:1px solid #E2E5EF;"></td>`).join('')}
+    <td colspan="2" style="border:1px solid #E2E5EF;"></td>
+    <td style="padding:10px 8px;font-weight:700;font-size:13px;color:#065F46;border:1px solid #E2E5EF;white-space:nowrap;">
+      ${totalPaid > 0 ? totalPaid.toLocaleString() + '원' : '-'}
+    </td>
+    <td style="border:1px solid #E2E5EF;"></td>
+  </tr>`;
+
   html += '</tbody></table>';
   document.getElementById('attendance-table').innerHTML = html;
 }
@@ -2300,6 +2373,91 @@ function exportAttendanceExcel(){
   a.click();
   URL.revokeObjectURL(url);
   showToast('출석부 다운로드 완료 📥','success');
+}
+
+
+// ── 회원 관리 ──
+let allMembers = {};
+
+db.ref('members').on('value', snap => {
+  allMembers = snap.val() || {};
+  if(adminLoggedIn) renderMemberList();
+});
+
+async function addMember(){
+  const name = document.getElementById('member-name-input').value.trim();
+  const phone = document.getElementById('member-phone-input').value.trim();
+  if(!name){ showToast('이름을 입력해주세요','error'); return; }
+  if(!phone || phone.length < 9){ showToast('전화번호를 입력해주세요','error'); return; }
+
+  // 중복 체크
+  if(Object.values(allMembers).some(m => m.phone === phone)){
+    showToast('이미 등록된 전화번호입니다','error'); return;
+  }
+
+  showLoading(true);
+  try {
+    await db.ref('members').push({name, phone});
+    document.getElementById('member-name-input').value = '';
+    document.getElementById('member-phone-input').value = '';
+    showToast(`${name}님 등록 완료`,'success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+async function removeMember(id, name){
+  if(!confirm(`${name}님을 회원 목록에서 삭제할까요?`)) return;
+  showLoading(true);
+  try {
+    await db.ref(`members/${id}`).remove();
+    showToast(`${name}님 삭제됐습니다`,'success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+function renderMemberList(){
+  const list = document.getElementById('member-list');
+  if(!list) return;
+  const members = Object.entries(allMembers).sort((a,b) => a[1].name.localeCompare(b[1].name,'ko'));
+  if(members.length === 0){
+    list.innerHTML = `<div style="color:var(--text2);font-size:13px;padding:8px 0;">등록된 회원이 없습니다. 회원을 추가하면 신청 시 이름/번호 검증이 활성화됩니다.</div>`;
+    return;
+  }
+  list.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">총 ${members.length}명 등록</div>` +
+    members.map(([id,m]) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#F9FAFB;border-radius:10px;margin-bottom:6px;border:1px solid var(--border);">
+      <div>
+        <span style="font-weight:700;font-size:14px;color:var(--text);">${m.name}</span>
+        <span style="margin-left:10px;font-size:13px;color:var(--text2);">${m.phone}</span>
+      </div>
+      <button onclick="removeMember('${id}','${m.name}')" style="padding:5px 12px;border-radius:8px;border:1.5px solid var(--danger);background:#fff;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;">삭제</button>
+    </div>`).join('');
+}
+
+// ── 신청자 정보 수정 (A안) ──
+let editTarget = null;
+
+function openEditBooking(key, id, name, phone){
+  editTarget = {key, id};
+  document.getElementById('edit-booking-subtitle').textContent = `${key.replace('_', ' ')} 수업 신청자`;
+  document.getElementById('edit-name-input').value = name;
+  document.getElementById('edit-phone-input').value = phone;
+  document.getElementById('edit-booking-modal').classList.add('show');
+}
+
+async function submitEditBooking(){
+  const name = document.getElementById('edit-name-input').value.trim();
+  const phone = document.getElementById('edit-phone-input').value.trim();
+  if(!name){ showToast('이름을 입력해주세요','error'); return; }
+  if(!phone || phone.length < 9){ showToast('전화번호를 입력해주세요','error'); return; }
+
+  showLoading(true);
+  try {
+    await db.ref(`bookings/${editTarget.key}/${editTarget.id}`).update({name, phone});
+    showToast('수정 완료','success');
+    closeModal('edit-booking-modal');
+  } catch(e){ showToast('수정 중 오류가 발생했습니다','error'); }
+  showLoading(false);
 }
 
 // ── 관리자 탭 전환 ──
@@ -2514,6 +2672,7 @@ function renderBookingsList(){
         ${b.status==='pending'?`<button class="small-btn small-btn-approve" onclick="updateStatus('${b.key}','${b.id}','approved','${b.name}')">승인</button>`:''}
         ${b.status!=='cancelled'?`<button class="small-btn small-btn-cancel" onclick="updateStatus('${b.key}','${b.id}','cancelled','${b.name}')">취소</button>`:''}
         ${b.status==='cancelled'?`<button class="small-btn small-btn-delete" onclick="deleteBooking('${b.key}','${b.id}','${b.name}')">🗑️ 삭제</button>`:''}
+        <button class="small-btn" style="background:#EEF2FF;color:var(--accent);" onclick="openEditBooking('${b.key}','${b.id}','${b.name}','${b.phone}')">✏️ 수정</button>
       </div>`;
     list.appendChild(card);
   });
@@ -2651,9 +2810,10 @@ document.addEventListener('keydown', e => {
     closeModal('change-new-modal');
     closeModal('cell-detail-modal');
     closeModal('bulk-change-modal');
+    closeModal('edit-booking-modal');
   }
 });
-['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal'].forEach(id => {
+['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal','edit-booking-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if(e.target.id===id) closeModal(id);
   });
