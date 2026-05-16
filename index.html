@@ -289,6 +289,11 @@
           <button onclick="addMember()"
             style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;white-space:nowrap;">추가</button>
         </div>
+        <div style="margin-bottom:12px;">
+          <button onclick="bulkAddMembersFromBookings()" style="width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;">
+            📋 현재 신청자에서 회원 일괄 등록
+          </button>
+        </div>
         <div id="member-list"></div>
       </div>
 
@@ -2383,6 +2388,42 @@ db.ref('members').on('value', snap => {
   allMembers = snap.val() || {};
   if(adminLoggedIn) renderMemberList();
 });
+
+
+async function bulkAddMembersFromBookings(){
+  // 전체 신청자에서 취소되지 않은 고유 이름+전화번호 수집
+  const uniqueMembers = {};
+  Object.values(allBookings).forEach(bMap => {
+    Object.values(bMap).forEach(b => {
+      if(b.status !== 'cancelled' && b.name && b.phone){
+        uniqueMembers[b.phone] = b.name;
+      }
+    });
+  });
+
+  const newMembers = Object.entries(uniqueMembers).filter(([phone]) =>
+    !Object.values(allMembers).some(m => m.phone === phone)
+  );
+
+  if(newMembers.length === 0){
+    showToast('등록할 신규 회원이 없습니다','error');
+    return;
+  }
+
+  if(!confirm(`신청자 중 미등록 회원 ${newMembers.length}명을 등록할까요?
+
+${newMembers.map(([phone,name])=>`${name} (${phone})`).join('
+')}`)) return;
+
+  showLoading(true);
+  try {
+    for(const [phone, name] of newMembers){
+      await db.ref('members').push({name, phone});
+    }
+    showToast(`${newMembers.length}명 회원 등록 완료 ✅`, 'success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
+}
 
 async function addMember(){
   const name = document.getElementById('member-name-input').value.trim();
