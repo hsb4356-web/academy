@@ -248,6 +248,7 @@
     <div class="legend-item"><div class="legend-dot" style="background:#D1D5DB"></div> 휴강</div>
     <div class="legend-item" style="font-size:11px;color:var(--text2)">숫자 = 남은 자리</div>
     <button onclick="openMyBookings()" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📋 내 수업</button>
+    <button onclick="openRegisterModal()" style="padding:7px 14px;border-radius:20px;border:1.5px solid var(--success);background:#fff;color:var(--success);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">👤 회원등록</button>
   </div>
   <div id="student-month-grid"></div>
 </main>
@@ -575,6 +576,32 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('bulk-change-modal');document.getElementById('my-modal').classList.add('show');">취소</button>
       <button class="btn btn-regular" onclick="submitBulkChange()">전체 변경하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 회원 등록 모달 -->
+<div class="modal-overlay" id="register-modal">
+  <div class="modal">
+    <span class="modal-handle"></span>
+    <button class="modal-close" onclick="closeModal('register-modal')">✕</button>
+    <h3>👤 회원 등록</h3>
+    <div class="modal-subtitle">이름과 전화번호를 입력해주세요</div>
+    <div class="notice-info notice-box" style="margin-bottom:16px;line-height:1.7;">
+      📌 회원 등록 후 수업 신청이 가능합니다<br>
+      <span style="font-size:12px;font-weight:400;">이미 등록된 회원이라면 그냥 신청하시면 됩니다</span>
+    </div>
+    <div class="form-group">
+      <label>이름</label>
+      <input type="text" id="register-name-input" placeholder="홍길동">
+    </div>
+    <div class="form-group">
+      <label>전화번호</label>
+      <input type="tel" id="register-phone-input" placeholder="010-0000-0000" oninput="formatPhone(this)" onkeydown="if(event.key==='Enter')submitRegister()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('register-modal')">취소</button>
+      <button class="btn btn-primary" onclick="submitRegister()">등록하기</button>
     </div>
   </div>
 </div>
@@ -2065,6 +2092,7 @@ async function submitBulkChange(){
 
     closeModal('bulk-change-modal');
     closeModal('edit-booking-modal');
+    closeModal('register-modal');
     showToast(bulkChangeName + '님 정기신청 전체 변경 완료! 총 ' + successCount + '회 ✅', 'success');
 
     myBookingsData = [];
@@ -2385,6 +2413,42 @@ function exportAttendanceExcel(){
 }
 
 
+
+// ── 회원 등록 (학생) ──
+function openRegisterModal(){
+  document.getElementById('register-name-input').value = '';
+  document.getElementById('register-phone-input').value = '';
+  document.getElementById('register-modal').classList.add('show');
+  setTimeout(() => document.getElementById('register-name-input').focus(), 100);
+}
+
+async function submitRegister(){
+  const name = document.getElementById('register-name-input').value.trim();
+  const phone = document.getElementById('register-phone-input').value.trim();
+  if(!name){ showToast('이름을 입력해주세요','error'); return; }
+  if(!phone || phone.length < 9){ showToast('전화번호를 입력해주세요','error'); return; }
+
+  // 이미 등록된 회원 체크
+  const existing = Object.values(allMembers).find(m => m.phone === phone);
+  if(existing){
+    if(existing.name === name){
+      showToast(`${name}님은 이미 등록된 회원입니다 ✅`, 'success');
+      closeModal('register-modal');
+    } else {
+      showToast(`이미 등록된 전화번호입니다 (등록명: ${existing.name})`, 'error');
+    }
+    return;
+  }
+
+  showLoading(true);
+  try {
+    await db.ref('members').push({name, phone});
+    closeModal('register-modal');
+    showToast(`${name}님 회원 등록 완료! 이제 수업 신청이 가능합니다 ✅`, 'success');
+  } catch(e){ showToast('등록 중 오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
+}
+
 // ── 회원 관리 ──
 let allMembers = {};
 
@@ -2499,6 +2563,7 @@ async function submitEditBooking(){
     await db.ref(`bookings/${editTarget.key}/${editTarget.id}`).update({name, phone});
     showToast('수정 완료','success');
     closeModal('edit-booking-modal');
+    closeModal('register-modal');
   } catch(e){ showToast('수정 중 오류가 발생했습니다','error'); }
   showLoading(false);
 }
@@ -2855,9 +2920,10 @@ document.addEventListener('keydown', e => {
     closeModal('cell-detail-modal');
     closeModal('bulk-change-modal');
     closeModal('edit-booking-modal');
+    closeModal('register-modal');
   }
 });
-['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal','edit-booking-modal'].forEach(id => {
+['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal','edit-booking-modal','register-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if(e.target.id===id) closeModal(id);
   });
