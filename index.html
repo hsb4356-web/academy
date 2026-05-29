@@ -265,6 +265,7 @@
       <input type="password" id="admin-pw" placeholder="비밀번호" onkeydown="if(event.key==='Enter')adminLogin()">
     </div>
     <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="adminLogin()">로그인</button>
+    <button onclick="adminResetPassword()" style="width:100%;margin-top:10px;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;text-decoration:underline;">비밀번호를 잊으셨나요?</button>
   </div>
   <div id="admin-panel" style="display:none">
     <!-- 상단: 로그아웃 + 탭 -->
@@ -2583,6 +2584,20 @@ function showAdminTab(tab){
 }
 
 // ── 관리자 로그인 (Firebase Auth) ──
+
+async function adminResetPassword(){
+  const email = document.getElementById('admin-email').value.trim();
+  if(!email){ showToast('이메일을 먼저 입력해주세요','error'); return; }
+  showLoading(true);
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showToast('비밀번호 재설정 이메일을 발송했습니다 📧', 'success');
+  } catch(e){
+    showToast('이메일 발송 실패: 이메일 주소를 확인해주세요','error');
+  }
+  showLoading(false);
+}
+
 async function adminLogin(){
   const email = document.getElementById('admin-email').value.trim();
   const pw = document.getElementById('admin-pw').value;
