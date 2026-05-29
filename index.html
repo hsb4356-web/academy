@@ -445,8 +445,7 @@
     <div class="regular-options" id="regular-options" style="display:none">
       <label>신청 기간 선택</label>
       <div style="display:flex;gap:8px;">
-        <button class="month-btn" onclick="selectMonths(0,this)" style="flex:1;text-align:center;">📅 이번달</button>
-        <button class="month-btn" id="btn-repeat-last" onclick="selectRepeatLast(this)" style="flex:1;text-align:center;background:var(--accent-light);border-color:var(--accent);color:var(--accent);">🔁 지난달과 동일하게</button>
+        <button class="month-btn" onclick="selectMonths(0,this)" style="flex:1;text-align:center;">📅 이번달 날짜 선택</button>
       </div>
       <div id="regular-preview" style="margin-top:10px;font-size:12px;color:var(--text2);line-height:1.8;"></div>
     </div>
@@ -1601,6 +1600,13 @@ function renderMyCalendar(){
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const todayStr = dateKey(new Date());
 
+  // 다음달 신청 가능 여부 확인 (이번달 정기신청 있는지)
+  const nextMonthYear = month === 11 ? year+1 : year;
+  const nextMonth = month === 11 ? 0 : month+1;
+  const nextMonthStr = `${nextMonthYear}-${String(nextMonth+1).padStart(2,'0')}`;
+  const hasNextMonth = myBookingsData.some(b => b.dateStr.startsWith(nextMonthStr));
+  const hasRegularThisMonth = myBookingsData.some(b => b.isRegular);
+
   let calHtml = `
     <div class="my-calendar">
       <div class="cal-header">
@@ -1608,6 +1614,13 @@ function renderMyCalendar(){
         <h4>${year}년 ${month+1}월 · 총 ${myBookingsData.length}개</h4>
         <button class="cal-nav" onclick="changeMyCalMonth(1)">&#8594;</button>
       </div>
+      ${hasRegularThisMonth && !hasNextMonth ? `
+      <div style="margin-bottom:12px;">
+        <button onclick="openNextMonthRepeat('${myBookingsData[0]?.phone||''}')"
+          style="width:100%;padding:11px;border-radius:10px;border:1.5px solid var(--regular);background:var(--regular-light);color:var(--regular);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;">
+          🔁 다음달(${nextMonth+1}월)도 동일하게 신청하기
+        </button>
+      </div>` : ''}
       <div class="cal-grid">
         <div class="cal-day-label">일</div><div class="cal-day-label">월</div>
         <div class="cal-day-label">화</div><div class="cal-day-label">수</div>
@@ -1754,6 +1767,152 @@ function showDayBookings(dateStr){
           </div>`;
       }).join('')}
     </div>`;
+}
+
+
+// ── 다음달 동일하게 신청 ──
+async function openNextMonthRepeat(phone){
+  if(!phone){ showToast('전화번호를 확인할 수 없습니다','error'); return; }
+
+  const today = new Date();
+  const nextMonthDate = new Date(today.getFullYear(), today.getMonth()+1, 1);
+  const nextMonthStr = dateKey(nextMonthDate).slice(0,7);
+  const nextYear = nextMonthDate.getFullYear();
+  const nextMonth = nextMonthDate.getMonth();
+
+  // 이번달 정기신청 내역에서 교시별 요일 파악
+  const thisMonthStr = dateKey(today).slice(0,7);
+  const thisMonthBookings = myBookingsData.filter(b =>
+    b.isRegular && b.dateStr.startsWith(thisMonthStr)
+  );
+
+  if(thisMonthBookings.length === 0){
+    showToast('이번달 정기신청 내역이 없습니다','error');
+    return;
+  }
+
+  // 교시별로 그룹화
+  const piGroups = {};
+  thisMonthBookings.forEach(b => {
+    if(!piGroups[b.pi]) piGroups[b.pi] = [];
+    piGroups[b.pi].push(b);
+  });
+
+  // 각 교시의 요일 파악 (첫 번째 수업 기준)
+  const bookingPlan = [];
+  Object.entries(piGroups).forEach(([pi, bookings]) => {
+    bookings.sort((a,b) => new Date(a.dateStr)-new Date(b.dateStr));
+    const firstDate = new Date(bookings[0].dateStr + 'T00:00:00');
+    const dow = firstDate.getDay();
+    const seatType = bookings[0].seatType;
+    bookingPlan.push({pi:parseInt(pi), dow, seatType});
+  });
+
+  // 다음달 날짜 계산 (교시별)
+  let previewHtml = `<div style="font-weight:700;color:var(--text);margin-bottom:10px;">다음달 신청 예정 일정</div>`;
+  const allNewDates = [];
+
+  bookingPlan.forEach(({pi, dow, seatType}) => {
+    const p = PERIODS[pi];
+    const dowLabel = ['일','월','화','수','목','금','토'][dow];
+    const typeLabel = seatType === 'desk' ? '책상' : '이젤';
+
+    // 다음달 같은 요일 날짜 (공휴일+휴강 제외)
+    const dates = [];
+    const cur = new Date(nextYear, nextMonth, 1);
+    while(cur.getDay() !== dow) cur.setDate(cur.getDate()+1);
+    const endOfMonth = new Date(nextYear, nextMonth+1, 0);
+    while(cur <= endOfMonth){
+      const dk = dateKey(cur);
+      if(!isHoliday(dk) && !isCellClosed(dk, pi)){
+        dates.push(new Date(cur));
+      }
+      cur.setDate(cur.getDate()+7);
+    }
+
+    allNewDates.push({pi, seatType, dates});
+
+    const dateStrs = dates.map(d => `${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]})`).join(', ');
+    previewHtml += `<div style="padding:8px 10px;background:#F9FAFB;border-radius:8px;margin-bottom:6px;font-size:13px;">
+      <span style="font-weight:700;color:var(--regular);">${p.label} ${dowLabel}요일 · ${typeLabel}</span><br>
+      <span style="color:var(--text2);">${dateStrs} (${dates.length}회)</span>
+    </div>`;
+  });
+
+  // 확인 팝업
+  const popup = document.createElement('div');
+  popup.id = 'next-month-popup';
+  popup.className = 'modal-overlay show';
+  popup.innerHTML = `
+    <div class="modal">
+      <span class="modal-handle"></span>
+      <button class="modal-close" onclick="document.getElementById('next-month-popup').remove()">✕</button>
+      <h3>🔁 다음달 동일하게 신청</h3>
+      <div class="modal-subtitle">${nextMonth+1}월 수업을 신청합니다</div>
+      ${previewHtml}
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('next-month-popup').remove()">취소</button>
+        <button class="btn btn-regular" onclick="submitNextMonthRepeat('${phone}', '${nextMonthStr}')">신청하기</button>
+      </div>
+    </div>`;
+  popup.addEventListener('click', e => { if(e.target === popup) popup.remove(); });
+  document.body.appendChild(popup);
+
+  // allNewDates를 전역으로 저장
+  window._nextMonthPlan = allNewDates;
+}
+
+async function submitNextMonthRepeat(phone, nextMonthStr){
+  const plan = window._nextMonthPlan;
+  if(!plan){ showToast('오류가 발생했습니다','error'); return; }
+
+  const member = Object.values(allMembers).find(m => m.phone === phone);
+  const name = member ? member.name : myBookingsData[0]?.name || '';
+
+  showLoading(true);
+  try {
+    const now = new Date().toISOString();
+    let totalCount = 0;
+
+    for(const {pi, seatType, dates} of plan){
+      if(dates.length === 0) continue;
+      const regularId = `reg_${nextMonthStr}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+      const max = seatType === 'desk' ? MAX_DESK : MAX_EASEL;
+
+      for(const d of dates){
+        const fKey = cellKey(d, pi);
+        const fSnap = await db.ref(`bookings/${fKey}`).once('value');
+        const fExisting = Object.values(fSnap.val() || {});
+        if(fExisting.find(b => b.phone === phone && b.status !== 'cancelled')) continue;
+        if(countByType(fKey, seatType) >= max) continue;
+        await db.ref(`bookings/${fKey}`).push({
+          name, phone, seatType, status:'pending',
+          time:now, isRegular:true, regularId, regularMonth:nextMonthStr
+        });
+        totalCount++;
+      }
+    }
+
+    const p = PERIODS[plan[0].pi];
+    await sendEmail(
+      `[다음달 반복신청] ${name}님`,
+      `다음달 수업이 신청되었습니다.
+
+이름: ${name}
+전화번호: ${phone}
+기간: ${nextMonthStr}
+총 ${totalCount}회
+
+관리자 페이지에서 승인해주세요.`
+    );
+
+    document.getElementById('next-month-popup')?.remove();
+    showToast(`${nextMonthStr} 수업 ${totalCount}회 신청 완료! ✅`, 'success');
+
+    // 내 수업 새로고침
+    searchMyBookings();
+  } catch(e){ showToast('신청 중 오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
 }
 
 // ── 수업 변경 ──
