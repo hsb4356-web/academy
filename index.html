@@ -531,7 +531,7 @@
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('change-new-modal');document.getElementById('my-modal').classList.add('show');">취소</button>
+      <button class="btn btn-secondary" onclick="closeChangeModalBack()">취소</button>
       <button class="btn" style="background:var(--accent2);color:#fff;flex:1" onclick="submitChange()">변경하기</button>
     </div>
   </div>
@@ -1915,6 +1915,46 @@ async function submitNextMonthRepeat(phone, nextMonthStr){
   showLoading(false);
 }
 
+
+
+function closeChangeModalBack(){
+  const isAdmin = changeTarget && changeTarget.isAdminChange;
+  closeModal('change-new-modal');
+  if(isAdmin){
+    openCellDetail(new Date(changeTarget.dateStr + 'T00:00:00'), changeTarget.pi, changeTarget.key);
+  } else {
+    document.getElementById('my-modal').classList.add('show');
+  }
+}
+
+// ── 관리자 수강생 수업 변경 ──
+function openAdminChangeBooking(key, id, name, phone, seatType, dateStr, pi){
+  closeModal('cell-detail-modal');
+  changeTarget = {key, id, name, phone, seatType, dateStr, pi:parseInt(pi), regularMonth:'admin', isAdminChange:true};
+  changeNewPeriod = null; changeNewSeat = null;
+
+  const d = new Date(dateStr + 'T00:00:00');
+  const p = PERIODS[parseInt(pi)];
+  document.getElementById('change-new-subtitle').textContent = `${name}님의 수업을 관리자가 변경합니다`;
+  document.getElementById('change-from-info').textContent =
+    `현재: ${d.getMonth()+1}/${d.getDate()} (${DAYS[dayIdx(d)]}) ${p.label} · ${seatType==='desk'?'책상':'이젤'}`;
+
+  document.getElementById('change-limit-info').innerHTML =
+    `<div class="notice-info notice-box">✏️ 관리자 변경 · 날짜·횟수 제한 없음</div>`;
+
+  // 날짜 제한 없음 (오늘부터 무제한)
+  const todayStr = dateKey(new Date());
+  document.getElementById('change-new-date').min = todayStr;
+  document.getElementById('change-new-date').removeAttribute('max');
+  document.getElementById('change-new-date').value = '';
+  document.querySelectorAll('#change-period-btns .month-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('change-card-desk').className = 'seat-select-card disabled';
+  document.getElementById('change-card-easel').className = 'seat-select-card disabled';
+  document.getElementById('change-desk-remain').textContent = '-';
+  document.getElementById('change-easel-remain').textContent = '-';
+  document.getElementById('change-new-modal').classList.add('show');
+}
+
 // ── 수업 변경 ──
 let changeTarget = null;
 let changeNewPeriod = null;
@@ -2026,30 +2066,35 @@ async function submitChange(){
 
   showLoading(true);
   try {
+    const isAdminChange = changeTarget.isAdminChange === true;
+    const oldBooking = allBookings[changeTarget.key]?.[changeTarget.id] || {};
+    const keepStatus = isAdminChange ? (oldBooking.status || 'pending') : 'pending';
+
     // 기존 신청 취소
     await db.ref(`bookings/${changeTarget.key}/${changeTarget.id}`).update({status:'cancelled'});
 
-    // 새 수업 신청 (변경된 수업으로 등록, 재변경 당일만 가능)
+    // 새 수업 신청
     await db.ref(`bookings/${newKey}`).push({
       name: changeTarget.name,
       phone: changeTarget.phone,
       seatType: changeNewSeat,
-      status: 'pending',
+      status: keepStatus,
       time: new Date().toISOString(),
-      isRegular: false,
-      regularId: null,
-      regularMonth: null,
+      isRegular: isAdminChange ? (oldBooking.isRegular || false) : false,
+      regularId: isAdminChange ? (oldBooking.regularId || null) : null,
+      regularMonth: isAdminChange ? (oldBooking.regularMonth || null) : null,
       changedFrom: changeTarget.key, // 변경 출처 표시
     });
 
-    // 변경 횟수 카운트: 정기신청 승인 후 변경만 차감
-    const rm = changeTarget.regularMonth;
-    const isCountable = rm && rm !== 'single' && rm !== 'changed';
-    if(isCountable){
-      const booking = allBookings[changeTarget.key]?.[changeTarget.id];
-      const isPending = booking && booking.status === 'pending';
-      if(!isPending){
-        await incrementChangeCount(changeTarget.phone, rm);
+    // 변경 횟수 카운트: 관리자 변경은 차감 안 함, 정기신청 승인 후 변경만 차감
+    if(!isAdminChange){
+      const rm = changeTarget.regularMonth;
+      const isCountable = rm && rm !== 'single' && rm !== 'changed';
+      if(isCountable){
+        const isPending = oldBooking.status === 'pending';
+        if(!isPending){
+          await incrementChangeCount(changeTarget.phone, rm);
+        }
       }
     }
 
@@ -2058,14 +2103,15 @@ async function submitChange(){
     const p = PERIODS[changeNewPeriod];
     const oldP = PERIODS[changeTarget.pi];
     const oldDate = new Date(changeTarget.dateStr + 'T00:00:00');
+    const emailSubjectPrefix = isAdminChange ? '[관리자 변경] ' : '';
     const emailOk = await sendEmail(
-      `수업 변경 - ${changeTarget.name}님`,
-      `수업이 변경되었습니다.\n\n👤 이름: ${changeTarget.name}\n📱 전화번호: ${changeTarget.phone}\n\n[변경 전]\n📅 ${oldDate.getMonth()+1}/${oldDate.getDate()} (${DAYS[dayIdx(oldDate)]}) ${oldP.label}\n🪑 ${changeTarget.seatType==='desk'?'책상':'이젤'}\n\n[변경 후]\n📅 ${newDate.getMonth()+1}/${newDate.getDate()} (${DAYS[dayIdx(newDate)]}) ${p.label}\n🪑 ${changeNewSeat==='desk'?'책상':'이젤'}\n\n관리자 페이지에서 승인해주세요.`
+      `${emailSubjectPrefix}수업 변경 - ${changeTarget.name}님`,
+      `수업이 변경되었습니다.\n\n👤 이름: ${changeTarget.name}\n📱 전화번호: ${changeTarget.phone}\n\n[변경 전]\n📅 ${oldDate.getMonth()+1}/${oldDate.getDate()} (${DAYS[dayIdx(oldDate)]}) ${oldP.label}\n🪑 ${changeTarget.seatType==='desk'?'책상':'이젤'}\n\n[변경 후]\n📅 ${newDate.getMonth()+1}/${newDate.getDate()} (${DAYS[dayIdx(newDate)]}) ${p.label}\n🪑 ${changeNewSeat==='desk'?'책상':'이젤'}${isAdminChange?'':'\n\n관리자 페이지에서 승인해주세요.'}`
     );
 
     closeModal('change-new-modal');
     if(!emailOk){
-      showToast(`${changeTarget.name}님 변경 완료 ✅ (알림 이메일 발송 실패 - 관리자에게 직접 연락하세요)`, 'success');
+      showToast(`${changeTarget.name}님 변경 완료 ✅ (알림 이메일 발송 실패)`, 'success');
     } else {
       showToast(`${changeTarget.name}님 수업이 변경됐습니다 ✅`, 'success');
     }
@@ -3025,6 +3071,7 @@ function openCellDetail(date, pi, key){
         <div class="booking-actions">
           ${b.status==='pending'?`<button class="small-btn small-btn-approve" onclick="updateStatusAndRefresh('${key}','${id}','approved','${b.name}','${dateKey(date)}',${pi})">승인</button>`:''}
           <button class="small-btn small-btn-cancel" onclick="updateStatusAndRefresh('${key}','${id}','cancelled','${b.name}','${dateKey(date)}',${pi})">취소</button>
+          <button class="small-btn" style="background:#EEF2FF;color:var(--accent);" onclick="openAdminChangeBooking('${key}','${id}','${b.name}','${b.phone}','${b.seatType}','${dateKey(date)}',${pi})">✏️ 변경</button>
         </div>
       </div>`;
   }).join('');
