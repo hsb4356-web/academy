@@ -306,7 +306,7 @@
 
       <div class="admin-section">
         <h3>🎌 공휴일 관리</h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">정기 신청 시 공휴일은 자동으로 제외됩니다</p>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">정기신청(4회) 시 공휴일은 자동으로 제외됩니다</p>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <input type="date" id="holiday-date-input"
             style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
@@ -424,18 +424,18 @@
     <div class="booking-type-select">
       <div class="type-card" id="type-single" onclick="selectBookingType('single')">
         <div class="type-icon">📅</div>
-        <div class="type-name">자유 신청</div>
+        <div class="type-name">자유신청(1회)</div>
         <div class="type-desc">이번 수업만 · 취소/변경 불가</div>
       </div>
       <div class="type-card" id="type-regular" onclick="selectBookingType('regular')">
         <div class="type-icon">🔄</div>
-        <div class="type-name">정기 신청</div>
+        <div class="type-name">정기신청(4회)</div>
         <div class="type-desc">매주 반복 · 월 1회 변경 가능</div>
       </div>
     </div>
 
     <div id="single-warning" style="display:none;" class="notice-danger notice-box" style="line-height:1.7;">
-      🚫 자유 신청 유의사항<br>
+      🚫 자유신청(1회) 유의사항<br>
       <span style="font-weight:400;font-size:12px;">
       · 신청 후 취소/변경이 불가합니다<br>
       · 결석 시 보충수업이 제공되지 않습니다
@@ -1092,7 +1092,7 @@ function selectBookingType(type){
   document.getElementById('type-regular').className = 'type-card' + (type==='regular'?' selected-regular':'');
   document.getElementById('regular-options').style.display = type==='regular' ? 'block' : 'none';
   document.getElementById('single-warning').style.display = type==='single' ? 'block' : 'none';
-  document.getElementById('submit-btn').textContent = type==='regular' ? '정기 신청하기' : '자유 신청하기';
+  document.getElementById('submit-btn').textContent = type==='regular' ? '정기신청(4회) 하기' : '자유신청(1회) 하기';
   document.getElementById('submit-btn').className = type==='regular' ? 'btn btn-regular' : 'btn btn-primary';
   selectedMonths = null;
   document.querySelectorAll('.month-btn').forEach(b => b.classList.remove('selected'));
@@ -1469,9 +1469,9 @@ async function submitBooking(){
 
       closeModal('booking-modal');
       if(!emailOk){
-        showToast(`${name}님 정기 신청 완료 ✅ (알림 이메일 발송 실패 - 관리자에게 직접 연락하세요)`, 'success');
+        showToast(`${name}님 정기신청(4회) 완료 ✅ (알림 이메일 발송 실패 - 관리자에게 직접 연락하세요)`, 'success');
       } else {
-        showToast(`${name}님 정기 신청 완료! 총 ${totalCount}회 ✅`, 'success');
+        showToast(`${name}님 정기신청(4회) 완료! 총 ${totalCount}회 ✅`, 'success');
       }
     }
 
@@ -1696,9 +1696,9 @@ function showDayBookings(dateStr){
                 <button onclick="openChangeFromMy('${b.key}','${b.id}','${b.name}','${b.seatType}','${b.dateStr}',${b.pi},'${b.phone}','single')"
                   style="flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">✏️ 변경</button>
               </div>
-              <div style="margin-top:6px;font-size:11px;color:var(--text3);">자유 신청 당일 1회 변경 가능 · 변경 후 재변경 불가</div>`;
+              <div style="margin-top:6px;font-size:11px;color:var(--text3);">자유신청(1회) 당일 1회 변경 가능 · 변경 후 재변경 불가</div>`;
           } else {
-            modifyBtns = `<div style="margin-top:8px;background:#FEF2F2;border-radius:8px;padding:8px 12px;font-size:12px;color:#991B1B;font-weight:600;">자유 신청은 당일에만 변경 가능합니다</div>`;
+            modifyBtns = `<div style="margin-top:8px;background:#FEF2F2;border-radius:8px;padding:8px 12px;font-size:12px;color:#991B1B;font-weight:600;">자유신청(1회)은 당일에만 변경 가능합니다</div>`;
           }
         } else if(b.changedFrom){
           // 변경된 수업 (자유→변경 또는 정기→변경): 당일에 한해 재변경 가능
@@ -1744,7 +1744,7 @@ function showDayBookings(dateStr){
               <div style="display:flex;gap:8px;margin-top:6px;">
                 ${cancelBtn}
               </div>
-              <div style="margin-top:6px;font-size:11px;color:var(--text3);">정기 신청 · ${limitNote}</div>`;
+              <div style="margin-top:6px;font-size:11px;color:var(--text3);">정기신청(4회) · ${limitNote}</div>`;
           }
         }
 
@@ -1939,7 +1939,7 @@ function openChangeFromMy(key, id, name, seatType, dateStr, pi, phone, regularMo
   if(regularMonth === 'single' || regularMonth === 'changed'){
     // 자유신청 당일 변경 / 변경된 수업 당일 재변경: 오늘 하루만
     limitNote = regularMonth === 'single'
-      ? '자유 신청 당일 변경 · 변경 후 재변경 불가'
+      ? '자유신청(1회) 당일 변경 · 변경 후 재변경 불가'
       : '변경된 수업 당일 재변경 · 이후 재변경 불가';
     maxDate = todayStr;
   } else {
@@ -2308,15 +2308,22 @@ function renderAttendanceTable(){
     });
   });
 
-  // 날짜 정렬
-  const allDates = [...new Set(
+  // 수업이 있는 날짜만 추출
+  const bookedDates = new Set(
     Object.values(studentMap).flatMap(s => s.dates)
-  )].sort();
+  );
 
-  if(allDates.length === 0){
+  if(bookedDates.size === 0){
     document.getElementById('attendance-table').innerHTML =
       '<div class="empty-state">이번 달 승인된 수업이 없습니다</div>';
     return;
+  }
+
+  // 이 달의 전체 날짜 생성 (수업 없는 날도 "휴무"로 표시)
+  const daysInThisMonth = new Date(year, month+1, 0).getDate();
+  const allDates = [];
+  for(let d=1; d<=daysInThisMonth; d++){
+    allDates.push(`${monthStr}-${String(d).padStart(2,'0')}`);
   }
 
   // 전화번호 기준으로 학생 묶기 (행은 전화번호 1개당 1행)
@@ -2362,6 +2369,10 @@ function renderAttendanceTable(){
         const dow = DAYS[dayIdx(dateObj)];
         const day = dateObj.getDate();
         const isPast = d <= todayStr;
+        const noClass = !bookedDates.has(d);
+        if(noClass){
+          return `<th style="${thStyle}background:#F3F4F6;color:#D1D5DB;">${day}<br><span style="font-size:9px;">휴무</span></th>`;
+        }
         return `<th style="${thStyle}${isPast?'':'color:#9CA3AF;'}">${day}<br>${dow}</th>`;
       }).join('')}
       <th style="${thStyle}">출석</th>
@@ -2381,6 +2392,9 @@ function renderAttendanceTable(){
         .sort((a,b) => parseInt(a[0])-parseInt(b[0]));
 
       if(dayPeriods.length === 0){
+        if(!bookedDates.has(d)){
+          return `<td style="${tdStyle}background:#F9FAFB;color:#E5E7EB;">·</td>`;
+        }
         return `<td style="${tdStyle}background:#FAFAFA;color:#D1D5DB;">-</td>`;
       }
 
@@ -2819,14 +2833,21 @@ function renderMonthRoster(){
   const periodThS = `padding:7px 6px;text-align:center;font-weight:700;font-size:12px;background:#EEF2FF;border:1px solid #E2E5EF;color:var(--accent);white-space:nowrap;min-width:60px;`;
   const weekThS = `padding:6px;text-align:center;font-weight:700;font-size:12px;background:#F8F7FF;border:1px solid #C7D2FE;color:var(--accent);`;
   let html = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;"><table style="border-collapse:collapse;width:100%;">
-  <thead><tr>
-    <th style="${periodThS}">교시</th>
-    ${['월','화','수','목','금','토','일'].map(d=>`<th style="${thS}">${d}</th>`).join('')}
-  </tr></thead><tbody>`;
-  weeks.forEach(weekDates => {
-    const inMonth = weekDates.filter(d => d.getMonth()===month);
-    const s = inMonth[0], e = inMonth[inMonth.length-1];
-    html += `<tr><td colspan="8" style="${weekThS}">${s.getMonth()+1}/${s.getDate()} ~ ${e.getMonth()+1}/${e.getDate()}</td></tr>`;
+  <tbody>`;
+  weeks.forEach((weekDates, weekIdx) => {
+    // 매주 첫 행에 날짜 헤더(요일+날짜) 표시
+    html += `<tr>
+      <th style="${periodThS}">교시</th>
+      ${weekDates.map(d => {
+        const outOfMonth = d.getMonth()!==month;
+        const dow = DAYS[dayIdx(d)];
+        const isSun = d.getDay()===0, isSat = d.getDay()===6;
+        const dColor = isSun?'#EF4444':isSat?'#2563EB':'var(--accent)';
+        return outOfMonth
+          ? `<th style="${thS}background:#FAFAFA;color:#D1D5DB;">-</th>`
+          : `<th style="${thS}color:${dColor};">${d.getMonth()+1}/${d.getDate()}<br><span style="font-size:9px;font-weight:600;">${dow}</span></th>`;
+      }).join('')}
+    </tr>`;
     PERIODS.forEach((p,pi) => {
       html += `<tr><td style="${periodThS}">${p.label}<br><span style="font-size:9px;font-weight:400;color:var(--text2);">${p.time}</span></td>`;
       weekDates.forEach(d => {
