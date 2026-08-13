@@ -1658,13 +1658,9 @@ function showDayBookings(dateStr){
 
   function canChangeByPolicy(dateStr){
     const d = new Date(dateStr + 'T00:00:00');
-    const dayOfWeek = d.getDay();
-    const thisSunday = new Date(d);
-    thisSunday.setDate(d.getDate() + (dayOfWeek===0 ? 7 : 7-dayOfWeek));
-    const nextSunday = new Date(thisSunday);
-    nextSunday.setDate(thisSunday.getDate()+7);
-    nextSunday.setHours(23,59,59,0);
-    return new Date() <= nextSunday;
+    const endOfMonth = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    endOfMonth.setHours(23,59,59,0);
+    return new Date() <= endOfMonth;
   }
 
   detail.innerHTML = `
@@ -1983,20 +1979,18 @@ function openChangeFromMy(key, id, name, seatType, dateStr, pi, phone, regularMo
       : '변경된 수업 당일 재변경 · 이후 재변경 불가';
     maxDate = todayStr;
   } else {
-    // 정기신청: 수업 주 포함 다음 주 일요일까지
-    const dayOfWeek = d.getDay();
-    const thisSunday = new Date(d);
-    thisSunday.setDate(d.getDate() + (dayOfWeek===0 ? 7 : 7-dayOfWeek));
-    const nextSunday = new Date(thisSunday);
-    nextSunday.setDate(thisSunday.getDate()+7);
-    maxDate = dateKey(nextSunday);
+    // 정기신청: 해당 월 안에서만 변경 가능
+    const bookingMonth = d.getMonth();
+    const bookingYear = d.getFullYear();
+    const endOfMonth = new Date(bookingYear, bookingMonth+1, 0);
+    maxDate = dateKey(endOfMonth);
     const booking = allBookings[key] && allBookings[key][id];
     const isPending = booking && booking.status === 'pending';
     const usedCount = getUsedChangeCount(phone, regularMonth);
     const mNum = parseInt(regularMonth.split('-')[1]);
     limitNote = isPending
-      ? '승인 전 변경 무제한'
-      : `${mNum}월 변경 ${usedCount}/1회 사용`;
+      ? `승인 전 변경 무제한 (${mNum}월 안에서만)`
+      : `${mNum}월 변경 ${usedCount}/1회 사용 · 해당 월 안에서만 가능`;
   }
 
   document.getElementById('change-limit-info').innerHTML =
@@ -2056,6 +2050,26 @@ async function submitChange(){
   const newKey = `${dateVal}_${changeNewPeriod}`;
   if(newKey===changeTarget.key && changeNewSeat===changeTarget.seatType){
     showToast('현재와 동일한 수업입니다','error'); return;
+  }
+
+  // 날짜 범위 서버 검증 (관리자 변경은 제외)
+  const isAdminChange2 = changeTarget.isAdminChange === true;
+  if(!isAdminChange2){
+    const rm = changeTarget.regularMonth;
+    if(rm === 'single' || rm === 'changed'){
+      // 자유신청/변경됨: 오늘만 가능
+      if(dateVal !== dateKey(new Date())){
+        showToast('자유신청은 신청 당일에만 변경 가능합니다','error'); return;
+      }
+    } else {
+      // 정기신청: 해당 월 안에서만
+      const d2 = new Date(changeTarget.dateStr + 'T00:00:00');
+      const endOfMonth2 = new Date(d2.getFullYear(), d2.getMonth()+1, 0);
+      endOfMonth2.setHours(23,59,59,0);
+      if(new Date(dateVal + 'T00:00:00') > endOfMonth2){
+        showToast('해당 월 안에서만 변경 가능합니다','error'); return;
+      }
+    }
   }
 
   // 중복 체크
