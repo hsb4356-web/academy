@@ -249,6 +249,7 @@
     <div class="legend-item" style="font-size:11px;color:var(--text2)">숫자 = 남은 자리</div>
     <button onclick="openMyBookings()" style="margin-left:auto;padding:7px 14px;border-radius:20px;border:1.5px solid var(--accent);background:#fff;color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📋 내 수업</button>
     <button onclick="openRegisterModal()" style="padding:7px 14px;border-radius:20px;border:1.5px solid var(--success);background:#fff;color:var(--success);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">👤 회원등록</button>
+    <button onclick="openStudyModal()" style="padding:7px 14px;border-radius:20px;border:1.5px solid var(--warning);background:#fff;color:var(--warning);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">📖 자습신청</button>
   </div>
   <div id="student-month-grid"></div>
 </main>
@@ -275,6 +276,7 @@
         <button class="tab-btn" onclick="showAdminTab('approval')">✅ 승인</button>
         <button class="tab-btn" onclick="showAdminTab('attendance')">📋 출석부</button>
         <button class="tab-btn" onclick="showAdminTab('members')">👤 회원</button>
+        <button class="tab-btn" onclick="showAdminTab('study')">📖 자습</button>
       </div>
       <button onclick="adminLogout()" style="padding:8px 16px;border-radius:20px;border:1.5px solid var(--border);background:#fff;color:var(--text2);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:600;">로그아웃</button>
     </div>
@@ -361,6 +363,48 @@
           </button>
         </div>
         <div id="member-list"></div>
+      </div>
+    </div>
+
+    <!-- 탭5: 자습 관리 -->
+    <div id="admin-tab-study" style="display:none">
+      <div class="admin-section">
+        <h3>📖 자습 슬롯 설정</h3>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">자습 가능한 날짜와 교시를 설정합니다. 월 8회 이상 수강생만 신청 가능합니다.</p>
+
+        <div style="background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:16px;">
+          <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:12px;">자습 슬롯 추가</div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <input type="date" id="study-slot-date"
+              style="flex:1;min-width:120px;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+            <select id="study-slot-period"
+              style="flex:1;min-width:120px;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+              <option value="0">1교시 10:00~13:00</option>
+              <option value="1">2교시 14:00~17:00</option>
+              <option value="2">3교시 18:00~22:00</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+            <input type="number" id="study-slot-easel" placeholder="이젤 최대 인원" min="1" max="10"
+              style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+            <input type="number" id="study-slot-desk" placeholder="책상 최대 인원" min="1" max="10"
+              style="flex:1;background:#F9FAFB;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:14px;outline:none;">
+            <button onclick="addStudySlot()"
+              style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:10px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:14px;font-weight:700;white-space:nowrap;">추가</button>
+          </div>
+        </div>
+
+        <div id="study-slot-list"></div>
+      </div>
+
+      <div class="admin-section">
+        <h3>📋 자습 신청 현황</h3>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <button class="nav-btn" onclick="changeStudyRosterMonth(-1)">&#8592;</button>
+          <h4 id="study-roster-title" style="font-size:16px;font-weight:700;"></h4>
+          <button class="nav-btn" onclick="changeStudyRosterMonth(1)">&#8594;</button>
+        </div>
+        <div id="study-roster-content"></div>
       </div>
     </div>
 
@@ -580,6 +624,35 @@
   </div>
 </div>
 
+<!-- 자습 신청 모달 -->
+<div class="modal-overlay" id="study-modal">
+  <div class="modal">
+    <span class="modal-handle"></span>
+    <button class="modal-close" onclick="closeModal('study-modal')">✕</button>
+    <h3>📖 자습 신청</h3>
+    <div class="modal-subtitle">전화번호로 자격 확인 후 신청하세요</div>
+    <div class="notice-info notice-box" style="line-height:1.7;margin-bottom:16px;">
+      📌 자습 신청 안내<br>
+      <span style="font-weight:400;font-size:12px;">
+      · 해당 월 정규수업 승인 완료된 분만 신청 가능<br>
+      · 월 8회(주 2회) 이상 수강생만 신청 가능<br>
+      · 월 8회 수강 → 자습 월 4회 / 월 12회 수강 → 자습 월 8회<br>
+      · 이월 불가, 정규수업 보충으로 사용 불가
+      </span>
+    </div>
+    <div class="form-group" id="study-phone-form">
+      <label>전화번호</label>
+      <input type="tel" id="study-phone" placeholder="010-0000-0000" oninput="formatPhone(this)" onkeydown="if(event.key==='Enter')checkStudyEligibility()">
+    </div>
+    <div id="study-check-result"></div>
+    <div id="study-slot-options" style="display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('study-modal')">닫기</button>
+      <button class="btn" style="background:var(--warning);color:#fff;" onclick="checkStudyEligibility()">자격 확인</button>
+    </div>
+  </div>
+</div>
+
 <!-- 회원 등록 모달 -->
 <div class="modal-overlay" id="register-modal">
   <div class="modal">
@@ -666,7 +739,7 @@ let studentMonthOffset = 0;
 let selectedCell = null, selectedSeatType = null;
 let bookingType = 'single', selectedMonths = null;
 let adminLoggedIn = false, currentFilter = 'all';
-let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {}, allAttendance = {};
+let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {}, allAttendance = {}, allStudySlots = {}, allStudyBookings = {};
 
 // ── Firebase 실시간 연동 ──
 db.ref('bookings').on('value', snap => {
@@ -686,6 +759,15 @@ db.ref('holidays').on('value', snap => {
 db.ref('changeCounts').on('value', snap => {
   allChangeCounts = snap.val() || {};
 });
+db.ref('studySlots').on('value', snap => {
+  allStudySlots = snap.val() || {};
+  if(adminLoggedIn) renderStudySlotList();
+});
+db.ref('studyBookings').on('value', snap => {
+  allStudyBookings = snap.val() || {};
+  if(adminLoggedIn) renderStudyRoster();
+});
+
 db.ref('attendance').on('value', snap => {
   allAttendance = snap.val() || {};
   if(adminLoggedIn) renderAttendanceTable();
@@ -2362,6 +2444,7 @@ async function submitBulkChange(){
     closeModal('bulk-change-modal');
     closeModal('edit-booking-modal');
     closeModal('register-modal');
+    closeModal('study-modal');
     showToast(bulkChangeName + '님 정기신청 전체 변경 완료! 총 ' + successCount + '회 ✅', 'success');
 
     myBookingsData = [];
@@ -2697,6 +2780,266 @@ function exportAttendanceExcel(){
 
 
 
+
+// ── 자습 시스템 ──
+let studyRosterYear = new Date().getFullYear();
+let studyRosterMonth = new Date().getMonth();
+
+// 자습 슬롯 추가
+async function addStudySlot(){
+  const date = document.getElementById('study-slot-date').value;
+  const pi = parseInt(document.getElementById('study-slot-period').value);
+  const easelMax = parseInt(document.getElementById('study-slot-easel').value);
+  const deskMax = parseInt(document.getElementById('study-slot-desk').value);
+
+  if(!date){ showToast('날짜를 선택해주세요','error'); return; }
+  if(!easelMax || !deskMax){ showToast('이젤/책상 최대 인원을 입력해주세요','error'); return; }
+
+  // 중복 체크
+  if(Object.values(allStudySlots).some(s => s.date===date && s.pi===pi)){
+    showToast('이미 등록된 슬롯입니다','error'); return;
+  }
+
+  showLoading(true);
+  try {
+    await db.ref('studySlots').push({date, pi, easelMax, deskMax});
+    document.getElementById('study-slot-date').value = '';
+    document.getElementById('study-slot-easel').value = '';
+    document.getElementById('study-slot-desk').value = '';
+    showToast('자습 슬롯 추가 완료','success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+async function removeStudySlot(id){
+  if(!confirm('이 자습 슬롯을 삭제할까요?')) return;
+  showLoading(true);
+  try {
+    await db.ref(`studySlots/${id}`).remove();
+    showToast('삭제됐습니다','success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+function renderStudySlotList(){
+  const list = document.getElementById('study-slot-list');
+  if(!list) return;
+  const slots = Object.entries(allStudySlots).sort((a,b) => a[1].date.localeCompare(b[1].date) || a[1].pi-b[1].pi);
+  if(slots.length === 0){
+    list.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:8px 0;">등록된 자습 슬롯이 없습니다</div>';
+    return;
+  }
+  list.innerHTML = slots.map(([id,s]) => {
+    const d = new Date(s.date + 'T00:00:00');
+    const p = PERIODS[s.pi];
+    const deskUsed = Object.values(allStudyBookings).filter(b => b.date===s.date && b.pi===s.pi && b.seatType==='desk' && b.status!=='cancelled').length;
+    const easelUsed = Object.values(allStudyBookings).filter(b => b.date===s.date && b.pi===s.pi && b.seatType==='easel' && b.status!=='cancelled').length;
+    return `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#F9FAFB;border-radius:10px;margin-bottom:6px;border:1px solid var(--border);">
+      <div>
+        <span style="font-weight:700;font-size:14px;color:var(--text);">${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]}) ${p.label}</span>
+        <span style="margin-left:8px;font-size:12px;color:var(--easel-color);">이젤 ${easelUsed}/${s.easelMax}</span>
+        <span style="margin-left:6px;font-size:12px;color:var(--desk-color);">책상 ${deskUsed}/${s.deskMax}</span>
+      </div>
+      <button onclick="removeStudySlot('${id}')" style="padding:5px 12px;border-radius:8px;border:1.5px solid var(--danger);background:#fff;color:var(--danger);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:700;">삭제</button>
+    </div>`;
+  }).join('');
+}
+
+function changeStudyRosterMonth(dir){
+  studyRosterMonth += dir;
+  if(studyRosterMonth > 11){ studyRosterMonth=0; studyRosterYear++; }
+  if(studyRosterMonth < 0){ studyRosterMonth=11; studyRosterYear--; }
+  renderStudyRoster();
+}
+
+function renderStudyRoster(){
+  const titleEl = document.getElementById('study-roster-title');
+  const contentEl = document.getElementById('study-roster-content');
+  if(!titleEl || !contentEl) return;
+
+  const monthStr = `${studyRosterYear}-${String(studyRosterMonth+1).padStart(2,'0')}`;
+  titleEl.textContent = `${studyRosterYear}년 ${studyRosterMonth+1}월`;
+
+  // 이달 자습 신청 목록
+  const monthBookings = Object.entries(allStudyBookings)
+    .filter(([,b]) => b.date.startsWith(monthStr) && b.status !== 'cancelled')
+    .sort((a,b) => a[1].date.localeCompare(b[1].date) || a[1].pi-b[1].pi);
+
+  if(monthBookings.length === 0){
+    contentEl.innerHTML = '<div class="empty-state">이번 달 자습 신청이 없습니다</div>';
+    return;
+  }
+
+  contentEl.innerHTML = monthBookings.map(([id,b]) => {
+    const d = new Date(b.date + 'T00:00:00');
+    const p = PERIODS[b.pi];
+    const typeLabel = b.seatType==='easel'?'이젤':'책상';
+    return `
+    <div class="booking-card" style="margin-bottom:8px;">
+      <div class="booking-info">
+        <div class="booking-name">${b.name} <span class="type-badge-${b.seatType}">${typeLabel}</span> <span style="background:#FEF9C3;color:#854D0E;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:700;">자습</span></div>
+        <div class="booking-detail">${b.phone} · ${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]}) ${p.label}</div>
+      </div>
+      <span class="status-badge ${b.status==='approved'?'status-approved':'status-pending'}">${b.status==='approved'?'승인됨':'대기중'}</span>
+      <div class="booking-actions">
+        ${b.status==='pending'?`<button class="small-btn small-btn-approve" onclick="updateStudyStatus('${id}','approved')">승인</button>`:''}
+        <button class="small-btn small-btn-cancel" onclick="updateStudyStatus('${id}','cancelled')">취소</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function updateStudyStatus(id, status){
+  showLoading(true);
+  try {
+    await db.ref(`studyBookings/${id}`).update({status});
+    showToast(status==='approved'?'승인 완료 ✅':'취소됐습니다', status==='approved'?'success':'error');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+// ── 자습 신청 (학생) ──
+function openStudyModal(){
+  document.getElementById('study-phone').value = '';
+  document.getElementById('study-check-result').innerHTML = '';
+  document.getElementById('study-slot-options').style.display = 'none';
+  document.getElementById('study-slot-options').innerHTML = '';
+  document.getElementById('study-modal').classList.add('show');
+  setTimeout(() => document.getElementById('study-phone').focus(), 100);
+}
+
+async function checkStudyEligibility(){
+  const phone = document.getElementById('study-phone').value.trim();
+  if(!phone || phone.length < 9){ showToast('전화번호를 입력해주세요','error'); return; }
+
+  const resultEl = document.getElementById('study-check-result');
+  const slotEl = document.getElementById('study-slot-options');
+  resultEl.innerHTML = '<div style="text-align:center;padding:12px;color:var(--text2);">확인 중...</div>';
+  slotEl.style.display = 'none';
+
+  // 이번달 승인된 정규수업 횟수 확인
+  const today = new Date();
+  const monthStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+  let approvedCount = 0;
+  let memberName = '';
+
+  Object.entries(allBookings).forEach(([key, bMap]) => {
+    const [dateStr] = key.split('_');
+    if(!dateStr.startsWith(monthStr)) return;
+    Object.values(bMap).forEach(b => {
+      if(b.phone === phone && b.status === 'approved'){
+        approvedCount++;
+        if(!memberName) memberName = b.name;
+      }
+    });
+  });
+
+  // 자격 확인
+  if(approvedCount < 8){
+    resultEl.innerHTML = `
+      <div class="notice-danger notice-box">
+        ❌ 자습 신청 불가<br>
+        <span style="font-weight:400;font-size:12px;">
+        이번 달 승인된 정규수업: ${approvedCount}회<br>
+        월 8회 이상 수강생만 자습 신청이 가능합니다
+        </span>
+      </div>`;
+    return;
+  }
+
+  // 자습 가능 횟수 계산
+  const studyLimit = approvedCount >= 12 ? 8 : 4;
+
+  // 이번달 이미 신청한 자습 횟수
+  const usedStudy = Object.values(allStudyBookings)
+    .filter(b => b.phone===phone && b.date.startsWith(monthStr) && b.status!=='cancelled').length;
+
+  const remaining = studyLimit - usedStudy;
+
+  resultEl.innerHTML = `
+    <div class="notice-info notice-box" style="margin-bottom:12px;">
+      ✅ ${memberName}님 자습 신청 가능<br>
+      <span style="font-weight:400;font-size:12px;">
+      이번 달 정규수업: ${approvedCount}회 승인 · 자습 한도: ${studyLimit}회<br>
+      사용: ${usedStudy}회 · <strong>잔여: ${remaining}회</strong>
+      </span>
+    </div>`;
+
+  if(remaining <= 0){
+    resultEl.innerHTML += '<div class="notice-danger notice-box">이번 달 자습 신청 횟수를 모두 사용했습니다</div>';
+    return;
+  }
+
+  // 신청 가능한 자습 슬롯 표시 (오늘 이후)
+  const todayStr = dateKey(today);
+  const availableSlots = Object.entries(allStudySlots)
+    .filter(([,s]) => s.date >= todayStr && s.date.startsWith(monthStr))
+    .sort((a,b) => a[1].date.localeCompare(b[1].date) || a[1].pi-b[1].pi);
+
+  if(availableSlots.length === 0){
+    resultEl.innerHTML += '<div style="color:var(--text2);font-size:13px;padding:8px 0;">이번 달 신청 가능한 자습 슬롯이 없습니다</div>';
+    return;
+  }
+
+  let slotHtml = '<div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:10px;">자습 가능 날짜 선택</div>';
+  availableSlots.forEach(([id, s]) => {
+    const d = new Date(s.date + 'T00:00:00');
+    const p = PERIODS[s.pi];
+    const easelUsed = Object.values(allStudyBookings).filter(b => b.date===s.date && b.pi===s.pi && b.seatType==='easel' && b.status!=='cancelled').length;
+    const deskUsed = Object.values(allStudyBookings).filter(b => b.date===s.date && b.pi===s.pi && b.seatType==='desk' && b.status!=='cancelled').length;
+    const easelLeft = s.easelMax - easelUsed;
+    const deskLeft = s.deskMax - deskUsed;
+
+    // 이미 신청했는지 체크
+    const alreadyBooked = Object.values(allStudyBookings).some(b =>
+      b.phone===phone && b.date===s.date && b.pi===s.pi && b.status!=='cancelled'
+    );
+
+    if(alreadyBooked){
+      slotHtml += `
+        <div style="padding:12px 14px;background:#F3F4F6;border-radius:10px;margin-bottom:8px;border:1px solid var(--border);">
+          <div style="font-weight:700;font-size:14px;color:var(--text2);">${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]}) ${p.label}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px;">✅ 이미 신청됨</div>
+        </div>`;
+      return;
+    }
+
+    slotHtml += `
+      <div style="padding:12px 14px;background:#fff;border-radius:10px;margin-bottom:8px;border:1.5px solid var(--border);">
+        <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:8px;">${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]}) ${p.label}</div>
+        <div style="display:flex;gap:8px;">
+          ${easelLeft > 0 ? `<button onclick="submitStudyBooking('${id}','${s.date}',${s.pi},'easel','${phone}','${memberName}')"
+            style="flex:1;padding:10px;border-radius:10px;border:1.5px solid var(--easel-color);background:var(--easel-light);color:var(--easel-color);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
+            이젤 신청 (${easelLeft}자리)</button>`
+            : `<div style="flex:1;padding:10px;border-radius:10px;background:#F3F4F6;color:var(--text3);text-align:center;font-size:13px;">이젤 마감</div>`}
+          ${deskLeft > 0 ? `<button onclick="submitStudyBooking('${id}','${s.date}',${s.pi},'desk','${phone}','${memberName}')"
+            style="flex:1;padding:10px;border-radius:10px;border:1.5px solid var(--desk-color);background:var(--desk-light);color:var(--desk-color);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
+            책상 신청 (${deskLeft}자리)</button>`
+            : `<div style="flex:1;padding:10px;border-radius:10px;background:#F3F4F6;color:var(--text3);text-align:center;font-size:13px;">책상 마감</div>`}
+        </div>
+      </div>`;
+  });
+
+  slotEl.innerHTML = slotHtml;
+  slotEl.style.display = 'block';
+}
+
+async function submitStudyBooking(slotId, date, pi, seatType, phone, name){
+  showLoading(true);
+  try {
+    await db.ref('studyBookings').push({
+      name, phone, date, pi:parseInt(pi), seatType,
+      status: 'pending',
+      time: new Date().toISOString()
+    });
+    showToast(`${name}님 자습 신청 완료! ✅`, 'success');
+    // 화면 새로고침
+    checkStudyEligibility();
+  } catch(e){ showToast('신청 중 오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
+}
+
 // ── 회원 등록 (학생) ──
 function openRegisterModal(){
   document.getElementById('register-name-input').value = '';
@@ -2717,6 +3060,7 @@ async function submitRegister(){
     if(existing.name === name){
       showToast(`${name}님은 이미 등록된 회원입니다 ✅`, 'success');
       closeModal('register-modal');
+    closeModal('study-modal');
     } else {
       showToast(`이미 등록된 전화번호입니다 (등록명: ${existing.name})`, 'error');
     }
@@ -2727,6 +3071,7 @@ async function submitRegister(){
   try {
     await db.ref('members').push({name, phone});
     closeModal('register-modal');
+    closeModal('study-modal');
     showToast(`${name}님 회원 등록 완료! 이제 수업 신청이 가능합니다 ✅`, 'success');
   } catch(e){ showToast('등록 중 오류가 발생했습니다','error'); console.error(e); }
   showLoading(false);
@@ -2847,22 +3192,24 @@ async function submitEditBooking(){
     showToast('수정 완료','success');
     closeModal('edit-booking-modal');
     closeModal('register-modal');
+    closeModal('study-modal');
   } catch(e){ showToast('수정 중 오류가 발생했습니다','error'); }
   showLoading(false);
 }
 
 // ── 관리자 탭 전환 ──
 function showAdminTab(tab){
-  ['roster','approval','attendance','members'].forEach(t => {
+  ['roster','approval','attendance','members','study'].forEach(t => {
     document.getElementById(`admin-tab-${t}`).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('#admin-tab-btns .tab-btn').forEach((b,i) => {
-    b.classList.toggle('active', ['roster','approval','attendance','members'][i]===tab);
+    b.classList.toggle('active', ['roster','approval','attendance','members','study'][i]===tab);
   });
   if(tab==='roster') renderAdmin();
   if(tab==='approval') renderBookingsList();
   if(tab==='attendance') renderAttendanceTable();
   if(tab==='members') renderMemberList();
+  if(tab==='study'){ renderStudySlotList(); renderStudyRoster(); }
 }
 
 // ── 관리자 로그인 (Firebase Auth) ──
@@ -3236,9 +3583,10 @@ document.addEventListener('keydown', e => {
     closeModal('bulk-change-modal');
     closeModal('edit-booking-modal');
     closeModal('register-modal');
+    closeModal('study-modal');
   }
 });
-['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal','edit-booking-modal','register-modal'].forEach(id => {
+['booking-modal','my-modal','change-new-modal','cell-detail-modal','bulk-change-modal','edit-booking-modal','register-modal','study-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if(e.target.id===id) closeModal(id);
   });
