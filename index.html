@@ -971,7 +971,12 @@ function renderStudentCalendar(){
       } else if(isPast){
         periodsHtml += `<div class="student-period-badge" style="background:#F3F4F6;color:var(--text3);border-left:3px solid #E5E7EB;">${p.label}</div>`;
       } else {
-        periodsHtml += `<div style="background:${pc.bg};border:1px solid ${pc.border};border-left:3px solid ${pc.color};border-radius:4px;padding:3px 4px;margin-bottom:1px;">`;
+        const anyLeftPeriod = easelLeft > 0 || deskLeft > 0;
+        const clickStyle = anyLeftPeriod ? 'cursor:pointer;' : 'opacity:0.5;';
+        const clickAction = anyLeftPeriod
+          ? `onclick="event.stopPropagation();openModal(new Date('${dateStr}T00:00:00'),${pi},'${dateStr}_${pi}',${deskLeft},${easelLeft})"`
+          : '';
+        periodsHtml += `<div style="background:${pc.bg};border:1px solid ${pc.border};border-left:3px solid ${pc.color};border-radius:4px;padding:3px 4px;margin-bottom:1px;${clickStyle}" ${clickAction}>`;
         periodsHtml += `<div style="font-size:9px;font-weight:700;color:${pc.color};margin-bottom:1px;">${p.label}</div>`;
         periodsHtml += `<div style="display:flex;gap:2px;">`;
         periodsHtml += `<span style="font-size:9px;font-weight:600;color:${easelLeft<=0?'#9CA3AF':pc.color};">이젤${easelLeft<=0?'✕':easelLeft}</span>`;
@@ -988,10 +993,7 @@ function renderStudentCalendar(){
     if(isToday2) cls += ' today-day';
     if(holiday) cls += ' holiday-day';
 
-    const clickable = !isPast && !allClosed2 && !holiday;
-    const onclick = clickable ? `onclick="openDayPeriodSelect('${dateStr}')"` : '';
-
-    html += `<div class="${cls}" ${onclick}>
+    html += `<div class="${cls}">
       <div class="student-date-num">${d}${holiday?` <span class="holiday-label">${holiday.name}</span>`:''}</div>
       ${periodsHtml}
     </div>`;
