@@ -1360,8 +1360,10 @@ async function submitBooking(){
   if(!name){ showToast('이름을 입력해주세요','error'); return; }
   if(!phone || phone.length < 9){ showToast('전화번호를 입력해주세요','error'); return; }
 
-  // 회원 검증 (회원 목록이 있는 경우에만)
-  if(Object.keys(allMembers).length > 0){
+  const isAdminAdd = selectedCell && selectedCell.isAdminAdd === true;
+
+  // 회원 검증 (관리자 추가는 제외)
+  if(!isAdminAdd && Object.keys(allMembers).length > 0){
     const member = Object.values(allMembers).find(m => m.phone === phone);
     if(!member){
       showLoading(false);
@@ -1923,6 +1925,52 @@ function closeChangeModalBack(){
   }
 }
 
+
+// ── 관리자 수강생 직접 추가 ──
+let adminAddTarget = null;
+
+function openAdminAddBooking(key, pi, dateStr){
+  adminAddTarget = {key, pi, dateStr};
+  const d = new Date(dateStr + 'T00:00:00');
+  const p = PERIODS[pi];
+
+  const deskLeft = MAX_DESK - countByType(key, 'desk');
+  const easelLeft = MAX_EASEL - countByType(key, 'easel');
+
+  // 기존 booking-modal 재활용
+  selectedCell = {
+    date: d, pi, key,
+    deskLeft, easelLeft
+  };
+  selectedSeatType = null;
+  bookingType = 'single';
+  selectedMonths = null;
+
+  document.getElementById('modal-title').textContent = `[관리자] ${p.label} 신청 추가`;
+  document.getElementById('modal-subtitle').textContent =
+    `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[dayIdx(d)]}) · ${p.time}`;
+
+  document.getElementById('card-easel').className = 'seat-select-card' + (easelLeft<=0?' disabled':'');
+  document.getElementById('card-desk').className = 'seat-select-card' + (deskLeft<=0?' disabled':'');
+  document.getElementById('easel-remain').textContent = easelLeft<=0 ? '마감' : `${easelLeft}자리 남음`;
+  document.getElementById('desk-remain').textContent = deskLeft<=0 ? '마감' : `${deskLeft}자리 남음`;
+  document.getElementById('input-name').value = '';
+  document.getElementById('input-phone').value = '';
+  document.getElementById('regular-options').style.display = 'none';
+  document.getElementById('single-warning').style.display = 'none';
+  document.getElementById('regular-preview').innerHTML = '';
+  document.getElementById('submit-btn').textContent = '추가하기';
+  document.getElementById('submit-btn').className = 'btn btn-primary';
+  document.getElementById('type-single').className = 'type-card selected-single';
+  document.getElementById('type-regular').className = 'type-card';
+
+  // 관리자 추가 플래그
+  selectedCell.isAdminAdd = true;
+
+  closeModal('cell-detail-modal');
+  document.getElementById('booking-modal').classList.add('show');
+}
+
 // ── 관리자 수강생 수업 변경 ──
 function openAdminChangeBooking(key, id, name, phone, seatType, dateStr, pi){
   closeModal('cell-detail-modal');
@@ -1938,9 +1986,8 @@ function openAdminChangeBooking(key, id, name, phone, seatType, dateStr, pi){
   document.getElementById('change-limit-info').innerHTML =
     `<div class="notice-info notice-box">✏️ 관리자 변경 · 날짜·횟수 제한 없음</div>`;
 
-  // 날짜 제한 없음 (오늘부터 무제한)
-  const todayStr = dateKey(new Date());
-  document.getElementById('change-new-date').min = todayStr;
+  // 관리자 변경: 날짜 제한 없음 (과거 날짜도 가능)
+  document.getElementById('change-new-date').removeAttribute('min');
   document.getElementById('change-new-date').removeAttribute('max');
   document.getElementById('change-new-date').value = '';
   document.querySelectorAll('#change-period-btns .month-btn').forEach(b => b.classList.remove('selected'));
@@ -3089,6 +3136,16 @@ function openCellDetail(date, pi, key){
         </div>
       </div>`;
   }).join('');
+
+  // 관리자 신청자 직접 추가 버튼
+  const addBtn = document.createElement('div');
+  addBtn.style.marginTop = '12px';
+  addBtn.innerHTML = `
+    <button onclick="openAdminAddBooking('${key}',${pi},'${dateKey(date)}')"
+      style="width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--accent);background:var(--accent-light);color:var(--accent);cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;">
+      ➕ 수강생 직접 추가
+    </button>`;
+  document.getElementById('cell-detail-content').appendChild(addBtn);
 
   document.getElementById('cell-detail-modal').classList.add('show');
 }
