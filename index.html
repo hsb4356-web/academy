@@ -422,6 +422,14 @@
         <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">
           셀을 클릭해서 출석(NT) / 결석(NTx) / 미체크(0)를 전환합니다
         </div>
+        <div style="margin-bottom:12px;padding:12px 14px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:10px;">
+          <div style="font-weight:700;font-size:13px;color:#9A3412;margin-bottom:8px;">🎨 개인레슨 관리 (관리자 전용)</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="private-lesson-name" placeholder="레슨생 이름"
+              style="flex:1;min-width:80px;background:#fff;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-family:'Noto Sans KR',sans-serif;font-size:13px;outline:none;">
+            <button onclick="addPrivateLesson()" style="padding:8px 16px;background:#EA580C;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;white-space:nowrap;">추가</button>
+          </div>
+        </div>
         <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;font-size:12px;">
           <span style="background:#ECFDF5;color:#065F46;padding:3px 8px;border-radius:6px;font-weight:700;">NT = 출석</span>
           <span style="background:#FEF2F2;color:#991B1B;padding:3px 8px;border-radius:6px;font-weight:700;">NTx = 결석</span>
@@ -738,7 +746,7 @@ let studentMonthOffset = 0;
 let selectedCell = null, selectedSeatType = null;
 let bookingType = 'single', selectedMonths = null;
 let adminLoggedIn = false, currentFilter = 'all';
-let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {}, allAttendance = {}, allStudySlots = {}, allStudyBookings = {};
+let allBookings = {}, allClosed = {}, allHolidays = {}, allChangeCounts = {}, allAttendance = {}, allStudySlots = {}, allStudyBookings = {}, allPrivateLessons = {};
 
 // ── Firebase 실시간 연동 ──
 db.ref('bookings').on('value', snap => {
@@ -758,6 +766,11 @@ db.ref('holidays').on('value', snap => {
 db.ref('changeCounts').on('value', snap => {
   allChangeCounts = snap.val() || {};
 });
+db.ref('privateLessons').on('value', snap => {
+  allPrivateLessons = snap.val() || {};
+  if(adminLoggedIn) renderAttendanceTable();
+});
+
 db.ref('studySlots').on('value', snap => {
   allStudySlots = snap.val() || {};
   if(adminLoggedIn) renderStudySlotList();
@@ -2665,6 +2678,86 @@ function renderAttendanceTable(){
     <td style="border:1px solid #E2E5EF;"></td>
   </tr>`;
 
+  // 개인레슨 섹션 (관리자 전용)
+  const privateLessonsThisMonth = Object.entries(allPrivateLessons)
+    .filter(([,l]) => l.month === monthStr)
+    .sort((a,b) => a[1].name.localeCompare(b[1].name, 'ko'));
+
+  if(privateLessonsThisMonth.length > 0){
+    // 구분선
+    html += `<tr><td colspan="${allDates.length + 5}" style="padding:8px 12px;background:#FFF7ED;border:1px solid #FED7AA;font-weight:700;font-size:12px;color:#9A3412;">🎨 개인레슨 (관리자 전용)</td></tr>`;
+
+    privateLessonsThisMonth.forEach(([lid, lesson], lidx) => {
+      const lessonAtt = (allAttendance[`private_${monthStr}`] || {})[lid] || {};
+      let lpresent = 0, labsent = 0;
+
+      const lcells = allDates.map(d => {
+        const status = lessonAtt[d];
+        const isPast = d < todayStr;
+        const isToday2 = d === todayStr;
+
+        if(status === 'present'){
+          lpresent++;
+          return `<td style="${tdStyle}background:#FFF7ED;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}','present')">
+            <span style="color:#EA580C;font-weight:700;font-size:12px;">${lpresent}T</span></td>`;
+        } else if(status === 'absent'){
+          labsent++;
+          return `<td style="${tdStyle}background:#FEF2F2;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}','absent')">
+            <span style="color:#991B1B;font-weight:700;font-size:12px;">${labsent}Tx</span></td>`;
+        } else if(isPast || isToday2){
+          return `<td style="${tdStyle}background:#FFFBEB;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}',null)">
+            <span style="color:#D97706;font-weight:600;font-size:12px;">?</span></td>`;
+        } else {
+          return `<td style="${tdStyle}background:#FFF7ED;color:#FED7AA;">·</td>`;
+        }
+      });
+
+      const lFeeData = (allAttendance[`private_fee_${monthStr}`] || {})[lid] || {};
+      const lFeeDate = lFeeData.date || '';
+      const lFeeAmount = lFeeData.amount || '';
+
+      html += `<tr>
+        <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#FFF7ED;font-size:12px;color:#EA580C;font-weight:700;position:sticky;left:0;z-index:1;">${lidx+1}</td>
+        <td style="${nameTdStyle}vertical-align:middle;background:#FFF7ED;position:sticky;left:36px;z-index:1;">
+          <div style="display:flex;align-items:center;gap:4px;">
+            <span style="font-weight:700;">${lesson.name}</span>
+            <button onclick="removePrivateLesson('${lid}','${lesson.name}')" style="padding:1px 5px;border-radius:4px;border:1px solid #FED7AA;background:#fff;color:#EA580C;cursor:pointer;font-size:10px;">✕</button>
+          </div>
+          <span style="font-size:10px;color:#EA580C;">개인레슨</span>
+        </td>
+        ${lcells.join('')}
+        <td style="${tdStyle}background:#FFF7ED;font-weight:700;color:#EA580C;">${lpresent}</td>
+        <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;">${labsent}</td>
+        <td style="${tdStyle}vertical-align:middle;">
+          <input type="date" value="${lFeeDate}" onchange="savePrivateFeeData('${monthStr}','${lid}','date',this.value)"
+            style="width:100%;border:1px solid #FED7AA;border-radius:6px;padding:3px 4px;font-size:11px;font-family:'Noto Sans KR',sans-serif;outline:none;">
+        </td>
+        <td style="${tdStyle}vertical-align:middle;">
+          <input type="number" value="${lFeeAmount}" placeholder="금액" onchange="savePrivateFeeData('${monthStr}','${lid}','amount',this.value)"
+            style="width:80px;border:1px solid #FED7AA;border-radius:6px;padding:3px 4px;font-size:11px;font-family:'Noto Sans KR',sans-serif;outline:none;">
+        </td>
+      </tr>`;
+    });
+
+    // 개인레슨 수강료 합계
+    const privateFeeMonth = allAttendance[`private_fee_${monthStr}`] || {};
+    let privateTotalPaid = 0;
+    privateLessonsThisMonth.forEach(([lid]) => {
+      const amt = parseFloat((privateFeeMonth[lid] || {}).amount || 0);
+      if(!isNaN(amt) && amt > 0) privateTotalPaid += amt;
+    });
+
+    html += `<tr style="background:#FFF7ED;border-top:2px solid #FED7AA;">
+      <td colspan="2" style="padding:10px 12px;font-weight:700;font-size:13px;color:#EA580C;border:1px solid #FED7AA;position:sticky;left:0;background:#FFF7ED;">💰 개인레슨 합계</td>
+      ${allDates.map(() => `<td style="border:1px solid #FED7AA;"></td>`).join('')}
+      <td colspan="2" style="border:1px solid #FED7AA;"></td>
+      <td style="padding:10px 8px;font-weight:700;font-size:13px;color:#EA580C;border:1px solid #FED7AA;white-space:nowrap;">
+        ${privateTotalPaid > 0 ? privateTotalPaid.toLocaleString() + '원' : '-'}
+      </td>
+      <td style="border:1px solid #FED7AA;"></td>
+    </tr>`;
+  }
+
   html += '</tbody></table>';
   document.getElementById('attendance-table').innerHTML = html;
 }
@@ -2691,6 +2784,64 @@ async function toggleAttendance(monthStr, studentKey, dateStr, currentStatus){
     }
   } catch(e){ showToast('오류가 발생했습니다','error'); console.error(e); }
   showLoading(false);
+}
+
+
+// ── 개인레슨 관리 ──
+async function addPrivateLesson(){
+  const nameEl = document.getElementById('private-lesson-name');
+  const name = nameEl.value.trim();
+  if(!name){ showToast('레슨생 이름을 입력해주세요','error'); return; }
+
+  const year = attendanceMonthYear;
+  const month = attendanceMonthMonth;
+  const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+
+  // 중복 체크
+  if(Object.values(allPrivateLessons).some(l => l.name===name && l.month===monthStr)){
+    showToast('이미 등록된 레슨생입니다','error'); return;
+  }
+
+  showLoading(true);
+  try {
+    await db.ref('privateLessons').push({name, month:monthStr});
+    nameEl.value = '';
+    showToast(`${name}님 개인레슨 등록 완료`,'success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+async function removePrivateLesson(id, name){
+  if(!confirm(`${name}님 개인레슨을 삭제할까요?`)) return;
+  showLoading(true);
+  try {
+    await db.ref(`privateLessons/${id}`).remove();
+    showToast(`${name}님 삭제됐습니다`,'success');
+  } catch(e){ showToast('오류가 발생했습니다','error'); }
+  showLoading(false);
+}
+
+async function togglePrivateAttendance(monthStr, lessonId, dateStr, currentStatus){
+  let newStatus;
+  if(currentStatus === null) newStatus = 'present';
+  else if(currentStatus === 'present') newStatus = 'absent';
+  else newStatus = null;
+
+  showLoading(true);
+  try {
+    if(newStatus === null){
+      await db.ref(`attendance/private_${monthStr}/${lessonId}/${dateStr}`).remove();
+    } else {
+      await db.ref(`attendance/private_${monthStr}/${lessonId}/${dateStr}`).set(newStatus);
+    }
+  } catch(e){ showToast('오류가 발생했습니다','error'); console.error(e); }
+  showLoading(false);
+}
+
+async function savePrivateFeeData(monthStr, lessonId, field, value){
+  try {
+    await db.ref(`attendance/private_fee_${monthStr}/${lessonId}/${field}`).set(value);
+  } catch(e){ showToast('저장 중 오류가 발생했습니다','error'); }
 }
 
 // ── 출석부 엑셀 다운로드 ──
