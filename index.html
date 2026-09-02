@@ -3531,7 +3531,7 @@ function renderMonthRoster(){
         const list = allBookings[key] ? Object.values(allBookings[key]).filter(b=>b.status!=='cancelled') : [];
         // 개인레슨 확인
         const dKey2 = dateKey(d);
-        const privateOnThisSlot = Object.values(allPrivateLessons).filter(l => l.date===dKey2 && l.pi===pi);
+        const privateOnThisSlot = Object.values(allPrivateLessons).filter(l => l.date===dKey2 && parseInt(l.pi)===pi);
         if(list.length===0 && privateOnThisSlot.length===0){
           html+=`<td style="${tdS}text-align:center;color:#D1D5DB;cursor:pointer;" onclick="openCellDetail(new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()}),${pi},'${key}')">-</td>`;
           return;
