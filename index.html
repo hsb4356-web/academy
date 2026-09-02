@@ -423,12 +423,23 @@
           셀을 클릭해서 출석(NT) / 결석(NTx) / 미체크(0)를 전환합니다
         </div>
         <div style="margin-bottom:12px;padding:12px 14px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:10px;">
-          <div style="font-weight:700;font-size:13px;color:#9A3412;margin-bottom:8px;">🎨 개인레슨 관리 (관리자 전용)</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <div style="font-weight:700;font-size:13px;color:#9A3412;margin-bottom:8px;">🎨 개인레슨 등록 (관리자 전용)</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
             <input type="text" id="private-lesson-name" placeholder="레슨생 이름"
               style="flex:1;min-width:80px;background:#fff;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-family:'Noto Sans KR',sans-serif;font-size:13px;outline:none;">
-            <button onclick="addPrivateLesson()" style="padding:8px 16px;background:#EA580C;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;white-space:nowrap;">추가</button>
+            <input type="date" id="private-lesson-date"
+              style="flex:1;min-width:120px;background:#fff;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-family:'Noto Sans KR',sans-serif;font-size:13px;outline:none;">
           </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="private-lesson-period"
+              style="flex:1;background:#fff;border:1.5px solid #FED7AA;border-radius:8px;padding:8px 12px;font-family:'Noto Sans KR',sans-serif;font-size:13px;outline:none;color:var(--text);">
+              <option value="0">1교시 10:00~13:00</option>
+              <option value="1">2교시 14:00~17:00</option>
+              <option value="2">3교시 18:00~22:00</option>
+            </select>
+            <button onclick="addPrivateLesson()" style="padding:8px 16px;background:#EA580C;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;font-size:13px;font-weight:700;white-space:nowrap;">수업 등록</button>
+          </div>
+          <div id="private-lesson-list" style="margin-top:8px;"></div>
         </div>
         <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;font-size:12px;">
           <span style="background:#ECFDF5;color:#065F46;padding:3px 8px;border-radius:6px;font-weight:700;">NT = 출석</span>
@@ -2485,6 +2496,7 @@ function changeAttendanceMonth(dir){
   if(attendanceMonthMonth > 11){ attendanceMonthMonth=0; attendanceMonthYear++; }
   if(attendanceMonthMonth < 0){ attendanceMonthMonth=11; attendanceMonthYear--; }
   renderAttendanceTable();
+  renderPrivateLessonList();
 }
 
 function renderAttendanceTable(){
@@ -2684,56 +2696,72 @@ function renderAttendanceTable(){
     .sort((a,b) => a[1].name.localeCompare(b[1].name, 'ko'));
 
   if(privateLessonsThisMonth.length > 0){
-    // 구분선
     html += `<tr><td colspan="${allDates.length + 5}" style="padding:8px 12px;background:#FFF7ED;border:1px solid #FED7AA;font-weight:700;font-size:12px;color:#9A3412;">🎨 개인레슨 (관리자 전용)</td></tr>`;
 
-    privateLessonsThisMonth.forEach(([lid, lesson], lidx) => {
-      const lessonAtt = (allAttendance[`private_${monthStr}`] || {})[lid] || {};
+    // 이름별로 묶기
+    const privateByName = {};
+    privateLessonsThisMonth.forEach(([lid, lesson]) => {
+      if(!privateByName[lesson.name]) privateByName[lesson.name] = [];
+      privateByName[lesson.name].push({lid, ...lesson});
+    });
+
+    Object.entries(privateByName).forEach(([name, lessons], nameIdx) => {
+      // 이 학생의 수업 날짜 set
+      const lessonDates = new Set(lessons.map(l => l.date));
       let lpresent = 0, labsent = 0;
 
       const lcells = allDates.map(d => {
-        const status = lessonAtt[d];
-        const isPast = d < todayStr;
-        const isToday2 = d === todayStr;
+        if(!lessonDates.has(d)){
+          return `<td style="${tdStyle}background:#FFF7ED;color:#FED7AA;font-size:10px;">·</td>`;
+        }
+        // 이 날짜의 레슨 ID 찾기
+        const dayLesson = lessons.find(l => l.date === d);
+        if(!dayLesson) return `<td style="${tdStyle}">-</td>`;
+        const lid = dayLesson.lid;
+        const attNode = (allAttendance[`private_${monthStr}`] || {})[lid] || {};
+        const status = attNode[d];
+        const isPast = d <= todayStr;
 
         if(status === 'present'){
           lpresent++;
           return `<td style="${tdStyle}background:#FFF7ED;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}','present')">
-            <span style="color:#EA580C;font-weight:700;font-size:12px;">${lpresent}T</span></td>`;
+            <span style="color:#EA580C;font-weight:700;font-size:12px;">${lpresent}T</span><br>
+            <span style="font-size:9px;color:#9CA3AF;">${PERIODS[dayLesson.pi].label}</span></td>`;
         } else if(status === 'absent'){
           labsent++;
           return `<td style="${tdStyle}background:#FEF2F2;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}','absent')">
-            <span style="color:#991B1B;font-weight:700;font-size:12px;">${labsent}Tx</span></td>`;
-        } else if(isPast || isToday2){
+            <span style="color:#991B1B;font-weight:700;font-size:12px;">${labsent}Tx</span><br>
+            <span style="font-size:9px;color:#9CA3AF;">${PERIODS[dayLesson.pi].label}</span></td>`;
+        } else if(isPast){
           return `<td style="${tdStyle}background:#FFFBEB;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}',null)">
-            <span style="color:#D97706;font-weight:600;font-size:12px;">?</span></td>`;
+            <span style="color:#D97706;font-weight:600;font-size:12px;">?</span><br>
+            <span style="font-size:9px;color:#9CA3AF;">${PERIODS[dayLesson.pi].label}</span></td>`;
         } else {
-          return `<td style="${tdStyle}background:#FFF7ED;color:#FED7AA;">·</td>`;
+          return `<td style="${tdStyle}background:#FFF7ED;cursor:pointer;" onclick="togglePrivateAttendance('${monthStr}','${lid}','${d}',null)">
+            <span style="color:#FED7AA;font-weight:600;font-size:12px;">0</span><br>
+            <span style="font-size:9px;color:#9CA3AF;">${PERIODS[dayLesson.pi].label}</span></td>`;
         }
       });
 
-      const lFeeData = (allAttendance[`private_fee_${monthStr}`] || {})[lid] || {};
-      const lFeeDate = lFeeData.date || '';
-      const lFeeAmount = lFeeData.amount || '';
+      // 수강료: 이름 기준으로 저장
+      const nameKey = name.replace(/\s/g,'_');
+      const lFeeData = (allAttendance[`private_fee_${monthStr}`] || {})[nameKey] || {};
 
       html += `<tr>
-        <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#FFF7ED;font-size:12px;color:#EA580C;font-weight:700;position:sticky;left:0;z-index:1;">${lidx+1}</td>
+        <td style="${nameTdStyle}vertical-align:middle;text-align:center;background:#FFF7ED;font-size:12px;color:#EA580C;font-weight:700;position:sticky;left:0;z-index:1;">${nameIdx+1}</td>
         <td style="${nameTdStyle}vertical-align:middle;background:#FFF7ED;position:sticky;left:36px;z-index:1;">
-          <div style="display:flex;align-items:center;gap:4px;">
-            <span style="font-weight:700;">${lesson.name}</span>
-            <button onclick="removePrivateLesson('${lid}','${lesson.name}')" style="padding:1px 5px;border-radius:4px;border:1px solid #FED7AA;background:#fff;color:#EA580C;cursor:pointer;font-size:10px;">✕</button>
-          </div>
-          <span style="font-size:10px;color:#EA580C;">개인레슨</span>
+          <span style="font-weight:700;">${name}</span><br>
+          <span style="font-size:10px;color:#EA580C;">개인레슨 (${lessons.length}회)</span>
         </td>
         ${lcells.join('')}
         <td style="${tdStyle}background:#FFF7ED;font-weight:700;color:#EA580C;">${lpresent}</td>
         <td style="${tdStyle}background:#FEF2F2;font-weight:700;color:#991B1B;">${labsent}</td>
         <td style="${tdStyle}vertical-align:middle;">
-          <input type="date" value="${lFeeDate}" onchange="savePrivateFeeData('${monthStr}','${lid}','date',this.value)"
+          <input type="date" value="${lFeeData.date||''}" onchange="savePrivateFeeData('${monthStr}','${nameKey}','date',this.value)"
             style="width:100%;border:1px solid #FED7AA;border-radius:6px;padding:3px 4px;font-size:11px;font-family:'Noto Sans KR',sans-serif;outline:none;">
         </td>
         <td style="${tdStyle}vertical-align:middle;">
-          <input type="number" value="${lFeeAmount}" placeholder="금액" onchange="savePrivateFeeData('${monthStr}','${lid}','amount',this.value)"
+          <input type="number" value="${lFeeData.amount||''}" placeholder="금액" onchange="savePrivateFeeData('${monthStr}','${nameKey}','amount',this.value)"
             style="width:80px;border:1px solid #FED7AA;border-radius:6px;padding:3px 4px;font-size:11px;font-family:'Noto Sans KR',sans-serif;outline:none;">
         </td>
       </tr>`;
@@ -2789,26 +2817,51 @@ async function toggleAttendance(monthStr, studentKey, dateStr, currentStatus){
 
 // ── 개인레슨 관리 ──
 async function addPrivateLesson(){
-  const nameEl = document.getElementById('private-lesson-name');
-  const name = nameEl.value.trim();
+  const name = document.getElementById('private-lesson-name').value.trim();
+  const date = document.getElementById('private-lesson-date').value;
+  const pi = parseInt(document.getElementById('private-lesson-period').value);
+
   if(!name){ showToast('레슨생 이름을 입력해주세요','error'); return; }
+  if(!date){ showToast('수업 날짜를 선택해주세요','error'); return; }
 
-  const year = attendanceMonthYear;
-  const month = attendanceMonthMonth;
-  const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+  const monthStr = date.slice(0,7);
 
-  // 중복 체크
-  if(Object.values(allPrivateLessons).some(l => l.name===name && l.month===monthStr)){
-    showToast('이미 등록된 레슨생입니다','error'); return;
+  // 중복 체크 (같은 이름+날짜+교시)
+  if(Object.values(allPrivateLessons).some(l => l.name===name && l.date===date && l.pi===pi)){
+    showToast('이미 등록된 수업입니다','error'); return;
   }
 
   showLoading(true);
   try {
-    await db.ref('privateLessons').push({name, month:monthStr});
-    nameEl.value = '';
-    showToast(`${name}님 개인레슨 등록 완료`,'success');
+    await db.ref('privateLessons').push({name, date, pi, month:monthStr});
+    document.getElementById('private-lesson-date').value = '';
+    showToast(`${name}님 ${PERIODS[pi].label} 수업 등록 완료`,'success');
+    renderPrivateLessonList();
   } catch(e){ showToast('오류가 발생했습니다','error'); }
   showLoading(false);
+}
+
+function renderPrivateLessonList(){
+  const listEl = document.getElementById('private-lesson-list');
+  if(!listEl) return;
+  const year = attendanceMonthYear;
+  const month = attendanceMonthMonth;
+  const monthStr = `${year}-${String(month+1).padStart(2,'0')}`;
+  const thisMonth = Object.entries(allPrivateLessons)
+    .filter(([,l]) => l.month === monthStr)
+    .sort((a,b) => a[1].date.localeCompare(b[1].date) || a[1].pi-b[1].pi || a[1].name.localeCompare(b[1].name,'ko'));
+  if(thisMonth.length === 0){
+    listEl.innerHTML = '<div style="font-size:12px;color:#9CA3AF;">등록된 개인레슨이 없습니다</div>';
+    return;
+  }
+  listEl.innerHTML = thisMonth.map(([id,l]) => {
+    const d = new Date(l.date + 'T00:00:00');
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:#fff;border-radius:6px;margin-bottom:4px;border:1px solid #FED7AA;font-size:12px;">
+      <span style="font-weight:700;color:#9A3412;">${l.name}</span>
+      <span style="color:#EA580C;">${d.getMonth()+1}/${d.getDate()}(${DAYS[dayIdx(d)]}) ${PERIODS[l.pi].label}</span>
+      <button onclick="removePrivateLesson('${id}','${l.name}')" style="padding:2px 6px;border:1px solid #FED7AA;background:#fff;color:#EA580C;border-radius:4px;cursor:pointer;font-size:11px;">✕</button>
+    </div>`;
+  }).join('');
 }
 
 async function removePrivateLesson(id, name){
@@ -3462,8 +3515,16 @@ function renderMonthRoster(){
         const closed = allClosed[key];
         if(closed){ html+=`<td style="${tdS}background:#F9FAFB;text-align:center;"><span style="color:#9CA3AF;font-size:11px;">휴강</span></td>`; return; }
         const list = allBookings[key] ? Object.values(allBookings[key]).filter(b=>b.status!=='cancelled') : [];
-        if(list.length===0){
+        // 개인레슨 확인
+        const dKey2 = dateKey(d);
+        const privateOnThisSlot = Object.values(allPrivateLessons).filter(l => l.date===dKey2 && l.pi===pi);
+        if(list.length===0 && privateOnThisSlot.length===0){
           html+=`<td style="${tdS}text-align:center;color:#D1D5DB;cursor:pointer;" onclick="openCellDetail(new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()}),${pi},'${key}')">-</td>`;
+          return;
+        }
+        if(list.length===0 && privateOnThisSlot.length>0){
+          const privateTags = privateOnThisSlot.map(l=>`<div style="font-size:11px;font-weight:700;color:#EA580C;padding:1px 0;">🎨${l.name}</div>`).join('');
+          html+=`<td style="${tdS}background:#FFF7ED;">${privateTags}</td>`;
           return;
         }
         const deskList = list.filter(b=>b.seatType==='desk');
@@ -3486,7 +3547,12 @@ function renderMonthRoster(){
             return `<div style="font-weight:700;font-size:12px;padding:1px 0;${b.status==='approved'?'color:#065F46;':'color:#92400E;'}">${dot}${b.name}</div>`;
           }).join('');
         }
-        html+=`<td style="${tdS}background:${bg};cursor:pointer;" onclick="openCellDetail(new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()}),${pi},'${key}')">${content}</td>`;
+        // 개인레슨 추가
+        let privateTag = '';
+        if(privateOnThisSlot.length>0){
+          privateTag = privateOnThisSlot.map(l=>`<div style="font-size:11px;font-weight:700;color:#EA580C;padding:1px 0;border-top:1px dashed #FED7AA;margin-top:2px;">🎨${l.name}</div>`).join('');
+        }
+        html+=`<td style="${tdS}background:${bg};cursor:pointer;" onclick="openCellDetail(new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()}),${pi},'${key}')">${content}${privateTag}</td>`;
       });
       html += '</tr>';
     });
