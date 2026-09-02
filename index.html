@@ -3527,11 +3527,18 @@ function renderMonthRoster(){
         if(outOfMonth){ html+=`<td style="${tdS}background:#FAFAFA;"></td>`; return; }
         const key = cellKey(d,pi);
         const closed = allClosed[key];
-        if(closed){ html+=`<td style="${tdS}background:#F9FAFB;text-align:center;"><span style="color:#9CA3AF;font-size:11px;">휴강</span></td>`; return; }
         const list = allBookings[key] ? Object.values(allBookings[key]).filter(b=>b.status!=='cancelled') : [];
-        // 개인레슨 확인
+        // 개인레슨 확인 (휴강일에도 표시)
         const dKey2 = dateKey(d);
         const privateOnThisSlot = Object.values(allPrivateLessons).filter(l => l.date===dKey2 && parseInt(l.pi)===pi);
+
+        if(closed && privateOnThisSlot.length===0){
+          html+=`<td style="${tdS}background:#F9FAFB;text-align:center;"><span style="color:#9CA3AF;font-size:11px;">휴강</span></td>`; return;
+        }
+        if(closed && privateOnThisSlot.length>0){
+          const privateTags = privateOnThisSlot.map(l=>`<div style="font-size:11px;font-weight:700;color:#EA580C;padding:1px 0;">🎨${l.name}</div>`).join('');
+          html+=`<td style="${tdS}background:#FFF7ED;">${privateTags}</td>`; return;
+        }
         if(list.length===0 && privateOnThisSlot.length===0){
           html+=`<td style="${tdS}text-align:center;color:#D1D5DB;cursor:pointer;" onclick="openCellDetail(new Date(${d.getFullYear()},${d.getMonth()},${d.getDate()}),${pi},'${key}')">-</td>`;
           return;
